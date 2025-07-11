@@ -17,7 +17,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Canvas LED Controller',
       scrollBehavior: WebScrollBehavior(),
-      themeMode: ThemeMode.light,
+      themeMode: ThemeMode.dark,
       darkTheme: ThemeData(
         scaffoldBackgroundColor: Colors.black87,
         colorScheme: ColorScheme.fromSeed(
