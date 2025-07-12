@@ -49,11 +49,14 @@ class Application extends StatefulWidget {
 
 class _ApplicationState extends State<Application> {
   int _pageIndex = 0;
+  List<String> devices = ["Hello", "bellow", "Zellow", "Kellogs!"];
 
-  final List<Widget> _screens = [
-    Connect(devices: ["Hello", "bellow", "Zellow", "Kellogs!"]),
-    Control(),
-  ];
+  List<Widget> _screens = [];
+
+  _ApplicationState() {
+    _screens.add(Connect(devices: devices));
+    _screens.add(Control());
+  }
 
   void _setPage(int pageIndex) {
     setState(() {
