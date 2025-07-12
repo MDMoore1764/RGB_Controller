@@ -26,6 +26,8 @@ class _ConnectState extends State<Connect> {
 
   @override
   Widget build(BuildContext context) {
+    final everyXDevicesDisabled = _timeDelay < 0.1;
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -118,12 +120,18 @@ class _ConnectState extends State<Connect> {
                         ],
                       ),
                     ),
+                  ],
+                ),
 
+                Row(
+                  children: [
                     Expanded(
                       child: Column(
                         children: [
                           Text(
-                            "Every: ${_offsetEvery.toStringAsFixed(0)} devices",
+                            everyXDevicesDisabled
+                                ? "Offset Disabled"
+                                : "Offset every${_offsetEvery == 1.0 ? ' other' : ' ${_offsetEvery.toStringAsFixed(0)}'} device${_offsetEvery == 1.0 ? '' : 's'}",
                           ),
                           RotatedBox(
                             quarterTurns: 0,
@@ -136,11 +144,13 @@ class _ConnectState extends State<Connect> {
                               label:
                                   "${_offsetEvery.toStringAsFixed(0)} devices",
 
-                              onChanged: (double newValue) {
-                                setState(() {
-                                  _offsetEvery = newValue.toInt();
-                                });
-                              },
+                              onChanged: everyXDevicesDisabled
+                                  ? null
+                                  : (double newValue) {
+                                      setState(() {
+                                        _offsetEvery = newValue.toInt();
+                                      });
+                                    },
                             ),
                           ),
                         ],
