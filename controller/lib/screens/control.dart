@@ -133,12 +133,6 @@ class _ControlState extends State<Control> {
         icon: Icons.border_horizontal,
         onSend: onSend,
       ),
-      // LightAnimation(
-      //   name: "Theater Chase",
-      //   command: "theater_chase",
-      //   icon: Icons.theater_comedy,
-      //   onSend: onSend,
-      // ),
       LightAnimation(
         name: "Larson",
         command: "larson",
