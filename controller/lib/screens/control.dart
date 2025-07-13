@@ -133,12 +133,12 @@ class _ControlState extends State<Control> {
         icon: Icons.border_horizontal,
         onSend: onSend,
       ),
-      LightAnimation(
-        name: "Theater Chase",
-        command: "theater_chase",
-        icon: Icons.theater_comedy,
-        onSend: onSend,
-      ),
+      // LightAnimation(
+      //   name: "Theater Chase",
+      //   command: "theater_chase",
+      //   icon: Icons.theater_comedy,
+      //   onSend: onSend,
+      // ),
       LightAnimation(
         name: "Larson",
         command: "larson",
@@ -260,9 +260,15 @@ class _ControlState extends State<Control> {
                             padding: const EdgeInsets.all(0),
                             elevation: 4,
                             shape: const CircleBorder(),
-                            backgroundColor: Theme.of(
-                              context,
-                            ).colorScheme.secondaryContainer,
+                            backgroundColor: isSelected
+                                ? Theme.of(context)
+                                      .colorScheme
+                                      .secondaryContainer
+                                      .withAlpha(255)
+                                : Theme.of(context)
+                                      .colorScheme
+                                      .secondaryContainer
+                                      .withAlpha(100),
                             foregroundColor: Theme.of(
                               context,
                             ).colorScheme.onSecondaryContainer,
