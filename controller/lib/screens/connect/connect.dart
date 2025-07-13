@@ -20,13 +20,14 @@ class _ConnectState extends State<Connect> {
   final List<String> _devices;
 
   _ConnectState({required List<String> devices}) : _devices = devices {
-    _timeDelay = 2.5;
+    _timeDelay = 0;
     _offsetEvery = 1;
   }
 
   @override
   Widget build(BuildContext context) {
-    final everyXDevicesDisabled = _timeDelay < 0.1;
+    final timeDelayDisabled = _devices.length <= 1;
+    final everyXDevicesDisabled = timeDelayDisabled || _timeDelay < 0.1;
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -97,7 +98,11 @@ class _ConnectState extends State<Connect> {
                     Expanded(
                       child: Column(
                         children: [
-                          Text("Offset: ${_timeDelay.toStringAsFixed(1)} s"),
+                          Text(
+                            timeDelayDisabled
+                                ? "Two or more devices required for time offset"
+                                : "Offset: ${_timeDelay.toStringAsFixed(1)} s",
+                          ),
                           SizedBox(
                             height: 50,
                             child: RotatedBox(
@@ -109,11 +114,13 @@ class _ConnectState extends State<Connect> {
                                 divisions: (5.0 / 0.1).toInt(),
                                 label: "${_timeDelay.toStringAsFixed(1)} s",
 
-                                onChanged: (double newValue) {
-                                  setState(() {
-                                    _timeDelay = newValue;
-                                  });
-                                },
+                                onChanged: timeDelayDisabled
+                                    ? null
+                                    : (double newValue) {
+                                        setState(() {
+                                          _timeDelay = newValue;
+                                        });
+                                      },
                               ),
                             ),
                           ),
@@ -130,7 +137,7 @@ class _ConnectState extends State<Connect> {
                         children: [
                           Text(
                             everyXDevicesDisabled
-                                ? "Offset Disabled"
+                                ? "Offset required for device skip"
                                 : "Offset every${_offsetEvery == 1.0 ? ' other' : ' ${_offsetEvery.toStringAsFixed(0)}'} device${_offsetEvery == 1.0 ? '' : 's'}",
                           ),
                           RotatedBox(
