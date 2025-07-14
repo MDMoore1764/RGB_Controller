@@ -128,8 +128,8 @@ class _ControlState extends State<Control> {
         onSend: onSend,
       ),
       LightAnimation(
-        name: "Color Wipe",
-        command: "color_wipe",
+        name: "Wipe",
+        command: "wipe",
         icon: Icons.border_horizontal,
         onSend: onSend,
       ),
@@ -225,6 +225,7 @@ class _ControlState extends State<Control> {
                   ),
                   Expanded(
                     child: GridView.builder(
+                      physics: BouncingScrollPhysics(),
                       itemCount: _animations.length,
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(

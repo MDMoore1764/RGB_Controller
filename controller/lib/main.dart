@@ -1,8 +1,10 @@
 import 'dart:ui';
 
+import 'package:controller/screens/connect/bluetooth_controller.dart';
 import 'package:controller/screens/connect/connect.dart';
 import 'package:controller/screens/control.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 void main() {
   runApp(const MyApp());
@@ -35,26 +37,35 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const Application(),
+      home: Application(),
     );
   }
 }
 
 class Application extends StatefulWidget {
-  const Application({super.key});
+  Application({super.key});
 
   @override
   State<Application> createState() => _ApplicationState();
 }
 
 class _ApplicationState extends State<Application> {
+  late BluetoothController bluetoothController;
   int _pageIndex = 0;
-  List<String> devices = ["Hello", "bellow", "Zellow", "Kellogs!"];
+  List<BluetoothDevice> devices = [];
 
   List<Widget> _screens = [];
 
   _ApplicationState() {
-    _screens.add(Connect(devices: devices));
+    bluetoothController = BluetoothController(
+      onDeviceListChange: (newDeviceList) {
+        setState(() {
+          devices = newDeviceList;
+        });
+      },
+    );
+
+    _screens.add(Connect(bluetoothController: bluetoothController));
     _screens.add(Control());
   }
 

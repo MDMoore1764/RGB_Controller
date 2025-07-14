@@ -1,33 +1,58 @@
+import 'dart:io';
+import 'dart:math';
+
+import 'package:controller/screens/connect/bluetooth_controller.dart';
 import 'package:controller/screens/connect/device_card.dart';
+import 'package:controller/screens/connect/scan_button_state.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 class Connect extends StatefulWidget {
-  final List<String> devices;
-
+  // final Future<void> Function(BluetoothDevice) connectToDevice;
+  // final Future<void> Function(BluetoothDevice) disconnectFromDevice;
+  // final bool isScanning;
+  // final bool bluetoothIsOn;
+  // final bool canActivateBluetooth;
+  // final bool bluetoothIsLoading
+  // final Future<bool> Function() activateBluetooth;
+  final BluetoothController bluetoothController;
   late double listHeight;
 
-  Connect({super.key, required this.devices}) {
+  Connect({super.key, required this.bluetoothController}) {
     this.listHeight = 150;
   }
 
   @override
-  State<Connect> createState() => _ConnectState(devices: devices);
+  State<Connect> createState() => _ConnectState();
 }
 
 class _ConnectState extends State<Connect> {
   late double _timeDelay;
   late int _offsetEvery;
-  final List<String> _devices;
 
-  _ConnectState({required List<String> devices}) : _devices = devices {
+  _ConnectState() {
     _timeDelay = 0;
     _offsetEvery = 1;
   }
 
   @override
   Widget build(BuildContext context) {
-    final timeDelayDisabled = _devices.length <= 1;
+    final connectedDevices = widget.bluetoothController.availableDevices.where((
+      d,
+    ) {
+      return d.isConnected;
+    }).toList();
+
+    final notConnectedDevices = widget.bluetoothController.availableDevices
+        .where((d) {
+          return !d.isConnected;
+        })
+        .toList();
+
+    final timeDelayDisabled = connectedDevices.length <= 1;
     final everyXDevicesDisabled = timeDelayDisabled || _timeDelay < 0.1;
+
+    ScanButtonState scanButtonState = getScanbuttonState();
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -54,11 +79,22 @@ class _ConnectState extends State<Connect> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.all(8),
                 itemBuilder: (context, index) {
-                  final device = this.widget.devices[index];
+                  final device = notConnectedDevices[index];
 
-                  return DeviceCard(name: device, selected: false);
+                  return GestureDetector(
+                    onTap: () {
+                      //How to check loading/connecting in progress? Hm...
+
+                      if (!device.isDisconnected) {
+                        return;
+                      }
+
+                      widget.bluetoothController.connectToDevice(device);
+                    },
+                    child: DeviceCard(name: device.advName, selected: false),
+                  );
                 },
-                itemCount: this.widget.devices.length,
+                itemCount: notConnectedDevices.length,
               ),
             ),
 
@@ -81,11 +117,22 @@ class _ConnectState extends State<Connect> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.all(8),
                 itemBuilder: (context, index) {
-                  final device = this.widget.devices[index];
+                  final device = connectedDevices[index];
 
-                  return DeviceCard(name: device, selected: true);
+                  return GestureDetector(
+                    onTap: () {
+                      //How to check loading/disconnecting in progress? Hm...
+
+                      if (!device.isConnected) {
+                        return;
+                      }
+
+                      widget.bluetoothController.disconnectFromDevice(device);
+                    },
+                    child: DeviceCard(name: device.advName, selected: true),
+                  );
                 },
-                itemCount: this.widget.devices.length,
+                itemCount: connectedDevices.length,
               ),
             ),
 
@@ -145,9 +192,12 @@ class _ConnectState extends State<Connect> {
                             child: Slider(
                               value: _offsetEvery.toDouble(),
 
-                              min: 1,
-                              max: this._devices.length.toDouble(),
-                              divisions: this._devices.length,
+                              min: min(connectedDevices.length.toDouble(), 1),
+                              max: max(connectedDevices.length.toDouble(), 1),
+                              divisions: max(
+                                connectedDevices.length.toDouble(),
+                                1,
+                              ).toInt(),
                               label:
                                   "${_offsetEvery.toStringAsFixed(0)} devices",
 
@@ -167,40 +217,6 @@ class _ConnectState extends State<Connect> {
                 ),
               ],
             ),
-
-            // Column(
-            //   children: [
-            //     Text("Every: $_offsetEvery devices"),
-            //     Row(
-            //       mainAxisAlignment: MainAxisAlignment.center,
-            //       crossAxisAlignment: CrossAxisAlignment.center,
-            //       children: [
-            //         Expanded(
-            //           child: SizedBox(
-            //             height: 50,
-            //             child: RotatedBox(
-            //               quarterTurns: 0,
-            //               child: Slider(
-            //                 value: _offsetEvery.toDouble(),
-
-            //                 min: 1,
-            //                 max: this._devices.length.toDouble(),
-            //                 divisions: 10,
-            //                 label: "${_timeDelay.toStringAsFixed(0)} devices",
-
-            //                 onChanged: (double newValue) {
-            //                   setState(() {
-            //                     _timeDelay = newValue;
-            //                   });
-            //                 },
-            //               ),
-            //             ),
-            //           ),
-            //         ),
-            //       ],
-            //     ),
-            //   ],
-            // ),
           ],
         ),
 
@@ -210,15 +226,43 @@ class _ConnectState extends State<Connect> {
               child: Container(
                 // margin: EdgeInsets.only(bottom: 30),
                 child: FloatingActionButton.extended(
-                  onPressed: () {},
+                  onPressed: scanButtonState.action,
                   icon: Icon(Icons.add),
-                  label: Text('Scan for Devices'),
+                  label: Text(scanButtonState.text),
                 ),
               ),
             ),
           ],
         ),
       ],
+    );
+  }
+
+  ScanButtonState getScanbuttonState() {
+    if (widget.bluetoothController.isScanning) {
+      return ScanButtonState(
+        text: "Scanning...",
+        action: widget.bluetoothController.toggleScan,
+      );
+    }
+
+    if (widget.bluetoothController.adapterState ==
+        BluetoothAdapterState.turningOn) {
+      return ScanButtonState(text: "Activating...", action: null);
+    }
+
+    if (widget.bluetoothController.adapterState != BluetoothAdapterState.on) {
+      return ScanButtonState(
+        text: "Activate Bluetooth",
+        action: Platform.isAndroid
+            ? widget.bluetoothController.turnOnBluetooth
+            : null,
+      );
+    }
+
+    return ScanButtonState(
+      text: "Scan for Devices",
+      action: widget.bluetoothController.toggleScan,
     );
   }
 }
