@@ -1,13 +1,17 @@
+import 'package:controller/utilities/bluetooth_device_utilities.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 class DeviceCard extends StatelessWidget {
-  final String name;
   final bool selected;
+  final BluetoothDevice device;
 
-  DeviceCard({super.key, required this.name, required this.selected});
+  DeviceCard({super.key, required this.device, required this.selected});
 
   @override
   Widget build(BuildContext context) {
+    final deviceText = getDeviceDisplayName(device);
+
     return Container(
       margin: EdgeInsets.symmetric(vertical: 0, horizontal: 5),
       child: SizedBox(
@@ -24,11 +28,19 @@ class DeviceCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  this.name,
+                  deviceText,
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.primary,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
+                  ),
+                ),
+                Text(
+                  this.device.isConnected ? "Connected" : "Disconnected",
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
                   ),
                 ),
                 Text(

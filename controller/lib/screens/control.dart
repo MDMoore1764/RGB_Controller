@@ -184,6 +184,7 @@ class _ControlState extends State<Control> {
             onColorChanged: (color) => setState(() => currentColor = color),
             paletteType: PaletteType.hueWheel,
             enableAlpha: false,
+            colorPickerWidth: 250,
             showLabel: false,
             portraitOnly: true,
             displayThumbColor: false,

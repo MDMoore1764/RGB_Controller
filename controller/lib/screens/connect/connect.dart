@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:controller/screens/connect/device_card.dart';
 import 'package:controller/screens/connect/scan_button_state.dart';
+import 'package:controller/utilities/bluetooth_device_utilities.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
@@ -137,11 +138,19 @@ class _ConnectState extends State<Connect> {
 
   @override
   Widget build(BuildContext context) {
-    final connectedDevices = widget.availableDevices.where((d) {
+    final filteredAvailableDevices = widget.availableDevices.where((device) {
+      //TODO: Undo this later once things are finished up.
+      // return device.advName.isNotEmpty;
+      return true;
+    }).toList();
+
+    filteredAvailableDevices.sort(compareBluetoothDevices);
+
+    final connectedDevices = filteredAvailableDevices.where((d) {
       return d.isConnected;
     }).toList();
 
-    final notConnectedDevices = widget.availableDevices.where((d) {
+    final notConnectedDevices = filteredAvailableDevices.where((d) {
       return !d.isConnected;
     }).toList();
 
@@ -189,7 +198,7 @@ class _ConnectState extends State<Connect> {
 
                       // widget.bluetoothController.connectToDevice(device);
                     },
-                    child: DeviceCard(name: device.advName, selected: false),
+                    child: DeviceCard(device: device, selected: false),
                   );
                 },
                 itemCount: notConnectedDevices.length,
@@ -228,7 +237,7 @@ class _ConnectState extends State<Connect> {
                       //TODO: Disconnect!
                       // widget.bluetoothController.disconnectFromDevice(device);
                     },
-                    child: DeviceCard(name: device.advName, selected: true),
+                    child: DeviceCard(device: device, selected: true),
                   );
                 },
                 itemCount: connectedDevices.length,
