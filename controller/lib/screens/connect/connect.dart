@@ -3,7 +3,6 @@ import 'dart:collection';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:controller/screens/connect/bluetooth_device_manager.dart';
 import 'package:controller/screens/connect/device_card.dart';
 import 'package:controller/screens/connect/scan_button_state.dart';
 import 'package:flutter/material.dart';
@@ -42,8 +41,8 @@ class _ConnectState extends State<Connect> {
   late double _timeDelay;
   late int _offsetEvery;
 
-  final List<BluetoothDevice> _availableDevices = [];
-  final List<BluetoothDevice> _connectedDevices = [];
+  // final List<BluetoothDevice> _availableDevices = [];
+  // final List<BluetoothDevice> _connectedDevices = [];
   final HashSet<String> _availableDeviceRemoteIDs = HashSet<String>();
   final HashSet<String> _connectedDeviceRemoteIDs = HashSet<String>();
 
@@ -105,16 +104,14 @@ class _ConnectState extends State<Connect> {
       return;
     }
 
-    _availableDevices.clear();
+    // _availableDevices.clear();
     _availableDeviceRemoteIDs.clear();
 
     setState(() {
       _scanning = true;
     });
 
-    if (widget.onAvailableDevicesChanged != null) {
-      widget.onAvailableDevicesChanged(_availableDevices);
-    }
+    widget.onAvailableDevicesChanged([]);
 
     scanSubscription = FlutterBluePlus.onScanResults.listen((results) {
       for (var result in results) {
@@ -124,15 +121,10 @@ class _ConnectState extends State<Connect> {
         if (!_availableDeviceRemoteIDs.contains(device.remoteId.str)) {
           _availableDeviceRemoteIDs.add(device.remoteId.str);
 
-          if (mounted) {
-            setState(() {
-              _availableDevices.add(device);
-            });
-          }
-
-          if (widget.onAvailableDevicesChanged != null) {
-            widget.onAvailableDevicesChanged!(_availableDevices);
-          }
+          widget.onAvailableDevicesChanged([
+            ...widget.availableDevices,
+            device,
+          ]);
         }
       }
     });
