@@ -1,6 +1,6 @@
 import 'dart:ui';
 
-import 'package:controller/screens/connect/bluetooth_controller.dart';
+import 'package:controller/screens/connect/bluetooth_device_manager.dart';
 import 'package:controller/screens/connect/connect.dart';
 import 'package:controller/screens/control.dart';
 import 'package:flutter/material.dart';
@@ -50,24 +50,12 @@ class Application extends StatefulWidget {
 }
 
 class _ApplicationState extends State<Application> {
-  late BluetoothController bluetoothController;
+  late BluetoothDeviceManager bluetoothController;
   int _pageIndex = 0;
-  List<BluetoothDevice> devices = [];
+  List<BluetoothDevice> availableDevices = [];
+  List<BluetoothDevice> connectedDevices = [];
 
-  List<Widget> _screens = [];
-
-  _ApplicationState() {
-    bluetoothController = BluetoothController(
-      onDeviceListChange: (newDeviceList) {
-        setState(() {
-          devices = newDeviceList;
-        });
-      },
-    );
-
-    _screens.add(Connect(bluetoothController: bluetoothController));
-    _screens.add(Control());
-  }
+  _ApplicationState() {}
 
   void _setPage(int pageIndex) {
     setState(() {
@@ -83,12 +71,29 @@ class _ApplicationState extends State<Application> {
     // The Flutter framework has been optimized to make rerunning build methods
     // fast, so that you can just rebuild anything that needs updating rather
     // than having to individually change instances of widgets.
+
+    final screens = [
+      Connect(
+        availableDevices: this.availableDevices,
+
+        connectedDevices: this.connectedDevices,
+
+        onConnectedDevicesChanged: (devices) => setState(() {
+          this.connectedDevices = [...devices];
+        }),
+
+        onAvailableDevicesChanged: (devices) => setState(() {
+          this.availableDevices = [...devices];
+        }),
+      ),
+      Control(),
+    ];
     return Scaffold(
       appBar: null,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(8.0),
-          child: _screens[_pageIndex],
+          child: screens[_pageIndex],
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(

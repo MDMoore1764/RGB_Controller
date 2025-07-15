@@ -1,7 +1,9 @@
+import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:controller/screens/connect/bluetooth_controller.dart';
+import 'package:controller/screens/connect/bluetooth_device_manager.dart';
 import 'package:controller/screens/connect/device_card.dart';
 import 'package:controller/screens/connect/scan_button_state.dart';
 import 'package:flutter/material.dart';
@@ -15,10 +17,20 @@ class Connect extends StatefulWidget {
   // final bool canActivateBluetooth;
   // final bool bluetoothIsLoading
   // final Future<bool> Function() activateBluetooth;
-  final BluetoothController bluetoothController;
   late double listHeight;
 
-  Connect({super.key, required this.bluetoothController}) {
+  final List<BluetoothDevice> availableDevices;
+  final List<BluetoothDevice> connectedDevices;
+  void Function(List<BluetoothDevice>) onAvailableDevicesChanged;
+  void Function(List<BluetoothDevice>) onConnectedDevicesChanged;
+
+  Connect({
+    super.key,
+    required this.availableDevices,
+    required this.connectedDevices,
+    required this.onAvailableDevicesChanged,
+    required this.onConnectedDevicesChanged,
+  }) {
     this.listHeight = 150;
   }
 
@@ -30,24 +42,116 @@ class _ConnectState extends State<Connect> {
   late double _timeDelay;
   late int _offsetEvery;
 
+  final List<BluetoothDevice> _availableDevices = [];
+  final List<BluetoothDevice> _connectedDevices = [];
+  final HashSet<String> _availableDeviceRemoteIDs = HashSet<String>();
+  final HashSet<String> _connectedDeviceRemoteIDs = HashSet<String>();
+
+  BluetoothAdapterState _bleAdapterState = FlutterBluePlus.adapterStateNow;
+
+  bool _scanning = false;
+
   _ConnectState() {
     _timeDelay = 0;
     _offsetEvery = 1;
+
+    //start listening to ble adapter state.
+
+    FlutterBluePlus.adapterState.listen((state) {
+      if (mounted) {
+        setState(() {
+          _bleAdapterState = state;
+        });
+      }
+    });
+
+    FlutterBluePlus.isScanning.listen((isScanning) {
+      if (!isScanning) {
+        if (mounted) {
+          setState(() {
+            _scanning = false;
+          });
+        }
+      }
+    });
+  }
+
+  Future<void> activateBluetooth() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+
+    await FlutterBluePlus.turnOn();
+  }
+
+  StreamSubscription<List<ScanResult>>? scanSubscription = null;
+
+  /// Starts scanning for BLE devices.
+  /// If already scanning, it stops.
+  /// [filterByServiceUuid] optionally restricts scanning to devices advertising a specific service UUID.
+  Future<void> toggleScan({
+    int scanDurationSeconds = 10,
+    Guid? filterByServiceUuid,
+  }) async {
+    if (scanSubscription != null) {
+      scanSubscription!.cancel();
+    }
+
+    if (_scanning) {
+      await FlutterBluePlus.stopScan();
+      setState(() {
+        this._scanning = false;
+      });
+      return;
+    }
+
+    _availableDevices.clear();
+    _availableDeviceRemoteIDs.clear();
+
+    setState(() {
+      _scanning = true;
+    });
+
+    if (widget.onAvailableDevicesChanged != null) {
+      widget.onAvailableDevicesChanged(_availableDevices);
+    }
+
+    scanSubscription = FlutterBluePlus.onScanResults.listen((results) {
+      for (var result in results) {
+        final device = result.device;
+
+        // Avoid duplicates
+        if (!_availableDeviceRemoteIDs.contains(device.remoteId.str)) {
+          _availableDeviceRemoteIDs.add(device.remoteId.str);
+
+          if (mounted) {
+            setState(() {
+              _availableDevices.add(device);
+            });
+          }
+
+          if (widget.onAvailableDevicesChanged != null) {
+            widget.onAvailableDevicesChanged!(_availableDevices);
+          }
+        }
+      }
+    });
+
+    await FlutterBluePlus.startScan(
+      withServices: filterByServiceUuid != null ? [filterByServiceUuid] : [],
+      timeout: Duration(seconds: scanDurationSeconds),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final connectedDevices = widget.bluetoothController.availableDevices.where((
-      d,
-    ) {
+    final connectedDevices = widget.availableDevices.where((d) {
       return d.isConnected;
     }).toList();
 
-    final notConnectedDevices = widget.bluetoothController.availableDevices
-        .where((d) {
-          return !d.isConnected;
-        })
-        .toList();
+    final notConnectedDevices = widget.availableDevices.where((d) {
+      return !d.isConnected;
+    }).toList();
 
     final timeDelayDisabled = connectedDevices.length <= 1;
     final everyXDevicesDisabled = timeDelayDisabled || _timeDelay < 0.1;
@@ -89,7 +193,9 @@ class _ConnectState extends State<Connect> {
                         return;
                       }
 
-                      widget.bluetoothController.connectToDevice(device);
+                      //TODO: Connect!!
+
+                      // widget.bluetoothController.connectToDevice(device);
                     },
                     child: DeviceCard(name: device.advName, selected: false),
                   );
@@ -127,7 +233,8 @@ class _ConnectState extends State<Connect> {
                         return;
                       }
 
-                      widget.bluetoothController.disconnectFromDevice(device);
+                      //TODO: Disconnect!
+                      // widget.bluetoothController.disconnectFromDevice(device);
                     },
                     child: DeviceCard(name: device.advName, selected: true),
                   );
@@ -239,30 +346,27 @@ class _ConnectState extends State<Connect> {
   }
 
   ScanButtonState getScanbuttonState() {
-    if (widget.bluetoothController.isScanning) {
-      return ScanButtonState(
-        text: "Scanning...",
-        action: widget.bluetoothController.toggleScan,
-      );
+    if (this._scanning) {
+      return ScanButtonState(text: "Scanning...", action: this.toggleScan);
     }
 
-    if (widget.bluetoothController.adapterState ==
-        BluetoothAdapterState.turningOn) {
+    if (this._bleAdapterState == BluetoothAdapterState.turningOn) {
       return ScanButtonState(text: "Activating...", action: null);
     }
 
-    if (widget.bluetoothController.adapterState != BluetoothAdapterState.on) {
+    if (this._bleAdapterState != BluetoothAdapterState.on) {
       return ScanButtonState(
         text: "Activate Bluetooth",
-        action: Platform.isAndroid
-            ? widget.bluetoothController.turnOnBluetooth
-            : null,
+        action: Platform.isAndroid ? this.activateBluetooth : null,
       );
     }
 
-    return ScanButtonState(
-      text: "Scan for Devices",
-      action: widget.bluetoothController.toggleScan,
-    );
+    return ScanButtonState(text: "Scan for Devices", action: this.toggleScan);
+  }
+
+  @override
+  void dispose() {
+    scanSubscription?.cancel();
+    super.dispose();
   }
 }

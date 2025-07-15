@@ -3,7 +3,7 @@ import 'dart:ffi';
 import 'dart:io';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
-class BluetoothController {
+class BluetoothDeviceManager {
   final HashSet<String> _locatedDeviceRemoteIDs = HashSet<String>();
   final HashSet<String> _connectedDeviceRemoteIDs = HashSet<String>();
   final List<BluetoothDevice> availableDevices = [];
@@ -14,7 +14,7 @@ class BluetoothController {
   bool isScanning = false;
   BluetoothAdapterState adapterState = BluetoothAdapterState.off;
 
-  BluetoothController({
+  BluetoothDeviceManager({
     this.onDeviceListChange,
     this.onConnectedDeviceListChange,
     this.onBluetoothStateChange,
@@ -34,53 +34,6 @@ class BluetoothController {
     }
 
     return false;
-  }
-
-  /// Starts scanning for BLE devices.
-  /// If already scanning, it stops.
-  /// [filterByServiceUuid] optionally restricts scanning to devices advertising a specific service UUID.
-  Future<void> toggleScan({
-    int scanDurationSeconds = 10,
-    Guid? filterByServiceUuid,
-  }) async {
-    if (isScanning) {
-      await FlutterBluePlus.stopScan();
-      isScanning = false;
-      return;
-    }
-
-    availableDevices.clear();
-    _locatedDeviceRemoteIDs.clear();
-
-    isScanning = true;
-    if (this.onDeviceListChange != null) {
-      this.onDeviceListChange!(availableDevices);
-    }
-
-    // Listen for new scan results.
-    FlutterBluePlus.scanResults.listen((results) {
-      for (var result in results) {
-        final device = result.device;
-
-        // Avoid duplicates
-        if (!_locatedDeviceRemoteIDs.contains(device.remoteId.str)) {
-          _locatedDeviceRemoteIDs.add(device.remoteId.str);
-          availableDevices.add(device);
-
-          if (this.onDeviceListChange != null) {
-            this.onDeviceListChange!(availableDevices);
-          }
-        }
-      }
-    });
-
-    await FlutterBluePlus.startScan(
-      withServices: filterByServiceUuid != null ? [filterByServiceUuid] : [],
-      timeout: Duration(seconds: scanDurationSeconds),
-    );
-
-    // Stop scan automatically after timeout
-    isScanning = false;
   }
 
   Future<void> connectToDevice(BluetoothDevice device) async {
