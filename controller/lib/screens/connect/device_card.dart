@@ -4,13 +4,26 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 class DeviceCard extends StatelessWidget {
   final bool selected;
-  final BluetoothDevice device;
+  final ScanResult scanResult;
+  final bool connecting;
+  final bool disconnecting;
 
-  DeviceCard({super.key, required this.device, required this.selected});
+  DeviceCard({
+    super.key,
+    required this.scanResult,
+    required this.selected,
+    required this.connecting,
+    required this.disconnecting,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final deviceText = getDeviceDisplayName(device);
+    final deviceText = getDeviceDisplayName(scanResult.device);
+
+    final signalStrengthText =
+        this.scanResult.advertisementData.txPowerLevel == null
+        ? ""
+        : "${this.scanResult.advertisementData.txPowerLevel} dBm";
 
     return Container(
       margin: EdgeInsets.symmetric(vertical: 0, horizontal: 5),
@@ -36,7 +49,13 @@ class DeviceCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  this.device.isConnected ? "Connected" : "Disconnected",
+                  this.disconnecting
+                      ? "Disconnecting..."
+                      : this.connecting
+                      ? "Connecting..."
+                      : this.scanResult.device.isConnected
+                      ? "Connected"
+                      : "Disconnected",
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.primary,
                     fontWeight: FontWeight.bold,
@@ -44,7 +63,7 @@ class DeviceCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  "5 db",
+                  signalStrengthText,
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.secondary,
                     fontSize: 12,

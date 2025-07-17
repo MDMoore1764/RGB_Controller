@@ -19,17 +19,13 @@ class Connect extends StatefulWidget {
   // final Future<bool> Function() activateBluetooth;
   late double listHeight;
 
-  final List<BluetoothDevice> availableDevices;
-  final List<BluetoothDevice> connectedDevices;
-  void Function(List<BluetoothDevice>) onAvailableDevicesChanged;
-  void Function(List<BluetoothDevice>) onConnectedDevicesChanged;
+  final List<ScanResult> availableDevices;
+  void Function(List<ScanResult>) onAvailableDevicesChanged;
 
   Connect({
     super.key,
     required this.availableDevices,
-    required this.connectedDevices,
     required this.onAvailableDevicesChanged,
-    required this.onConnectedDevicesChanged,
   }) {
     this.listHeight = 150;
   }
@@ -46,8 +42,15 @@ class _ConnectState extends State<Connect> {
   // final List<BluetoothDevice> _connectedDevices = [];
   final HashSet<String> _availableDeviceRemoteIDs = HashSet<String>();
   final HashSet<String> _connectedDeviceRemoteIDs = HashSet<String>();
+  final HashSet<String> _connectingDeviceRemoteIDs = HashSet<String>();
+  final HashSet<String> _disconnectingDeviceRemoteIDs = HashSet<String>();
 
   BluetoothAdapterState _bleAdapterState = FlutterBluePlus.adapterStateNow;
+
+  final List<StreamSubscription> _baseSubscriptions = [];
+  final List<StreamSubscription> _deviceSubscriptions = [];
+
+  late final HashMap<String, BluetoothConnectionState> _deviceconnectionStates;
 
   bool _scanning = false;
 
@@ -55,9 +58,16 @@ class _ConnectState extends State<Connect> {
     _timeDelay = 0;
     _offsetEvery = 1;
 
+    _deviceconnectionStates = HashMap<String, BluetoothConnectionState>();
+  }
+
+  @override
+  initState() {
+    super.initState();
+
     //start listening to ble adapter state.
 
-    FlutterBluePlus.adapterState.listen((state) {
+    final adapterStateSub = FlutterBluePlus.adapterState.listen((state) {
       if (mounted) {
         setState(() {
           _bleAdapterState = state;
@@ -65,7 +75,7 @@ class _ConnectState extends State<Connect> {
       }
     });
 
-    FlutterBluePlus.isScanning.listen((isScanning) {
+    final isScanningSub = FlutterBluePlus.isScanning.listen((isScanning) {
       if (!isScanning) {
         if (mounted) {
           setState(() {
@@ -74,6 +84,24 @@ class _ConnectState extends State<Connect> {
         }
       }
     });
+
+    _baseSubscriptions.add(adapterStateSub);
+    _baseSubscriptions.add(isScanningSub);
+
+    for (final device in widget.availableDevices) {
+      _deviceconnectionStates[device.device.remoteId.str] =
+          device.device.isConnected
+          ? BluetoothConnectionState.connected
+          : BluetoothConnectionState.disconnected;
+
+      final deviceStateSub = device.device.connectionState.listen((
+        connectionState,
+      ) {
+        handleConnectionStateChanged(device, connectionState);
+      });
+
+      _deviceSubscriptions.add(deviceStateSub);
+    }
   }
 
   Future<void> activateBluetooth() async {
@@ -105,26 +133,61 @@ class _ConnectState extends State<Connect> {
       return;
     }
 
-    // _availableDevices.clear();
-    _availableDeviceRemoteIDs.clear();
+    for (final deviceStateSubscription in _deviceSubscriptions) {
+      deviceStateSubscription.cancel();
+    }
 
-    setState(() {
-      _scanning = true;
+    //keep devices that are connecte, remove others.
+    final connectedResults = widget.availableDevices.where((d) {
+      return d.device.isConnected;
+    }).toList();
+
+    final disconnectedDeviceIDs = widget.availableDevices
+        .where((device) {
+          return !device.device.isConnected;
+        })
+        .map((d) {
+          return d.device.remoteId.str;
+        })
+        .toSet();
+
+    _availableDeviceRemoteIDs.removeWhere((id) {
+      return disconnectedDeviceIDs.contains(id);
     });
 
-    widget.onAvailableDevicesChanged([]);
+    _deviceSubscriptions.removeWhere((id) {
+      return disconnectedDeviceIDs.contains(id);
+    });
+
+    _deviceconnectionStates.removeWhere((id, state) {
+      return disconnectedDeviceIDs.contains(id);
+    });
+
+    widget.onAvailableDevicesChanged(connectedResults);
+
+    if (mounted) {
+      setState(() {
+        _scanning = true;
+      });
+    }
 
     scanSubscription = FlutterBluePlus.onScanResults.listen((results) {
       for (var result in results) {
-        final device = result.device;
-
         // Avoid duplicates
-        if (!_availableDeviceRemoteIDs.contains(device.remoteId.str)) {
-          _availableDeviceRemoteIDs.add(device.remoteId.str);
+        if (!_availableDeviceRemoteIDs.contains(result.device.remoteId.str)) {
+          _availableDeviceRemoteIDs.add(result.device.remoteId.str);
+
+          final deviceStateSub = result.device.connectionState.listen((
+            connectionState,
+          ) {
+            handleConnectionStateChanged(result, connectionState);
+          });
+
+          _deviceSubscriptions.add(deviceStateSub);
 
           widget.onAvailableDevicesChanged([
             ...widget.availableDevices,
-            device,
+            result,
           ]);
         }
       }
@@ -144,20 +207,26 @@ class _ConnectState extends State<Connect> {
       return true;
     }).toList();
 
-    filteredAvailableDevices.sort(compareBluetoothDevices);
+    filteredAvailableDevices.sort(compareBluetoothScanResults);
 
-    final connectedDevices = filteredAvailableDevices.where((d) {
-      return d.isConnected;
+    final resultsWithConnectedDevices = filteredAvailableDevices.where((d) {
+      return _deviceconnectionStates.containsKey(d.device.remoteId.str) &&
+          _deviceconnectionStates[d.device.remoteId.str] ==
+              BluetoothConnectionState.connected;
     }).toList();
 
-    final notConnectedDevices = filteredAvailableDevices.where((d) {
-      return !d.isConnected;
+    final notConnectedScanResults = filteredAvailableDevices.where((d) {
+      return !_deviceconnectionStates.containsKey(d.device.remoteId.str) ||
+          _deviceconnectionStates[d.device.remoteId.str] !=
+              BluetoothConnectionState.connected;
     }).toList();
 
-    final timeDelayDisabled = connectedDevices.length <= 1;
+    final timeDelayDisabled = resultsWithConnectedDevices.length <= 1;
     final everyXDevicesDisabled = timeDelayDisabled || _timeDelay < 0.1;
 
     ScanButtonState scanButtonState = getScanbuttonState();
+
+    print(_deviceconnectionStates);
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -184,24 +253,30 @@ class _ConnectState extends State<Connect> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.all(8),
                 itemBuilder: (context, index) {
-                  final device = notConnectedDevices[index];
+                  final scanResult = notConnectedScanResults[index];
 
                   return GestureDetector(
                     onTap: () {
                       //How to check loading/connecting in progress? Hm...
 
-                      if (!device.isDisconnected) {
+                      if (!scanResult.device.isDisconnected) {
                         return;
                       }
 
-                      //TODO: Connect!!
-
-                      // widget.bluetoothController.connectToDevice(device);
+                      handleTryConnect(scanResult.device);
                     },
-                    child: DeviceCard(device: device, selected: false),
+                    child: DeviceCard(
+                      scanResult: scanResult,
+                      selected: false,
+                      connecting: this._connectingDeviceRemoteIDs.contains(
+                        scanResult.device.remoteId.str,
+                      ),
+                      disconnecting: this._disconnectingDeviceRemoteIDs
+                          .contains(scanResult.device.remoteId.str),
+                    ),
                   );
                 },
-                itemCount: notConnectedDevices.length,
+                itemCount: notConnectedScanResults.length,
               ),
             ),
 
@@ -224,23 +299,30 @@ class _ConnectState extends State<Connect> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.all(8),
                 itemBuilder: (context, index) {
-                  final device = connectedDevices[index];
+                  final scanResult = resultsWithConnectedDevices[index];
 
                   return GestureDetector(
                     onTap: () {
                       //How to check loading/disconnecting in progress? Hm...
 
-                      if (!device.isConnected) {
+                      if (!scanResult.device.isConnected) {
                         return;
                       }
 
-                      //TODO: Disconnect!
-                      // widget.bluetoothController.disconnectFromDevice(device);
+                      scanResult.device.disconnect();
                     },
-                    child: DeviceCard(device: device, selected: true),
+                    child: DeviceCard(
+                      scanResult: scanResult,
+                      selected: true,
+                      connecting: this._connectingDeviceRemoteIDs.contains(
+                        scanResult.device.remoteId.str,
+                      ),
+                      disconnecting: this._disconnectingDeviceRemoteIDs
+                          .contains(scanResult.device.remoteId.str),
+                    ),
                   );
                 },
-                itemCount: connectedDevices.length,
+                itemCount: resultsWithConnectedDevices.length,
               ),
             ),
 
@@ -300,10 +382,16 @@ class _ConnectState extends State<Connect> {
                             child: Slider(
                               value: _offsetEvery.toDouble(),
 
-                              min: min(connectedDevices.length.toDouble(), 1),
-                              max: max(connectedDevices.length.toDouble(), 1),
+                              min: min(
+                                resultsWithConnectedDevices.length.toDouble(),
+                                1,
+                              ),
+                              max: max(
+                                resultsWithConnectedDevices.length.toDouble(),
+                                1,
+                              ),
                               divisions: max(
-                                connectedDevices.length.toDouble(),
+                                resultsWithConnectedDevices.length.toDouble(),
                                 1,
                               ).toInt(),
                               label:
@@ -346,6 +434,120 @@ class _ConnectState extends State<Connect> {
     );
   }
 
+  Future<void> handleTryConnect(BluetoothDevice device) async {
+    try {
+      if (mounted) {
+        setState(() {
+          _connectingDeviceRemoteIDs.add(device.remoteId.str);
+        });
+      }
+      await device.connect();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '❌ Failed to connect to ${getDeviceDisplayName(device)}: $e',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _connectingDeviceRemoteIDs.remove(device.remoteId.str);
+        });
+      }
+    }
+  }
+
+  Future<void> handleTrydisconnect(BluetoothDevice device) async {
+    try {
+      if (mounted) {
+        setState(() {
+          _disconnectingDeviceRemoteIDs.add(device.remoteId.str);
+        });
+      }
+      await device.disconnect();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '❌ Failed to disconnect from ${getDeviceDisplayName(device)}: $e',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _disconnectingDeviceRemoteIDs.remove(device.remoteId.str);
+        });
+      }
+    }
+  }
+
+  void handleConnectionStateChanged(
+    ScanResult result,
+    BluetoothConnectionState state,
+  ) {
+    print(
+      "*****************************STATE CHANGED*****************************",
+    );
+
+    print(
+      "Device: ${getDeviceDisplayName(result.device)} | State: ${state.toString()}",
+    );
+
+    print(
+      "*****************************END STATE CHANGED*****************************",
+    );
+
+    switch (state) {
+      case BluetoothConnectionState.connected:
+        {
+          // ScaffoldMessenger.of(context).showSnackBar(
+          //   SnackBar(
+          //     content: Text('✅ Connected to ${result.device.platformName}'),
+          //   ),
+          // );
+
+          break;
+        }
+
+      case BluetoothConnectionState.disconnected:
+        {
+          if (!_deviceconnectionStates.containsKey(
+            result.device.remoteId.str,
+          )) {
+            break;
+          }
+
+          // ScaffoldMessenger.of(context).showSnackBar(
+          //   SnackBar(
+          //     content: Text(
+          //       '🔌 Disconnected from ${result.device.platformName}',
+          //     ),
+          //   ),
+          // );
+
+          break;
+        }
+
+      default:
+        {
+          break;
+        }
+    }
+
+    if (mounted) {
+      setState(() {
+        _deviceconnectionStates[result.device.remoteId.str] = state;
+      });
+    }
+  }
+
   ScanButtonState getScanbuttonState() {
     if (this._scanning) {
       return ScanButtonState(text: "Scanning...", action: this.toggleScan);
@@ -368,6 +570,14 @@ class _ConnectState extends State<Connect> {
   @override
   void dispose() {
     scanSubscription?.cancel();
+    // _baseSubscriptions.forEach((s) {
+    //   s.cancel();
+    // });
+
+    // _deviceSubscriptions.forEach((s) {
+    //   s.cancel();
+    // });
+
     super.dispose();
   }
 }

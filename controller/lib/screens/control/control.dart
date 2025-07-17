@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
-import 'control/light_animation.dart';
+import 'light_animation.dart';
 
 class Control extends StatefulWidget {
-  const Control({super.key});
+  final Color color;
+  const Control({super.key, required this.color});
 
   @override
   State<Control> createState() => _ControlState();
 }
 
 class _ControlState extends State<Control> {
-  Color currentColor = Colors.blue;
   String selectedAnimation = "";
   final List<LightAnimation> _animations = [];
   _ControlState() {
@@ -20,8 +19,6 @@ class _ControlState extends State<Control> {
 
     selectedAnimation = _animations.first.name;
   }
-
-  void changeColor(Color color) => setState(() => currentColor = color);
 
   void sendPattern(String patternName) {
     debugPrint('Sending pattern: $patternName');
@@ -177,21 +174,6 @@ class _ControlState extends State<Control> {
     return Column(
       mainAxisAlignment: MainAxisAlignment.start,
       children: [
-        Card(
-          elevation: 1,
-          child: ColorPicker(
-            pickerColor: currentColor,
-            onColorChanged: (color) => setState(() => currentColor = color),
-            paletteType: PaletteType.hueWheel,
-            enableAlpha: false,
-            colorPickerWidth: 250,
-            showLabel: false,
-            portraitOnly: true,
-            displayThumbColor: false,
-            pickerAreaHeightPercent: 1.0,
-          ),
-        ),
-        const SizedBox(height: 20),
         Expanded(
           child: Card(
             elevation: 1,
@@ -208,7 +190,7 @@ class _ControlState extends State<Control> {
                           decoration: BoxDecoration(
                             border: Border(
                               bottom: BorderSide(
-                                color: currentColor,
+                                color: widget.color,
                                 width: 1.5,
                               ),
                             ),

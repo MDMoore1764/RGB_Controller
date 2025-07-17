@@ -1,8 +1,9 @@
 import 'dart:ui';
 
+import 'package:controller/screens/color/color_screen.dart';
 import 'package:controller/screens/connect/bluetooth_device_manager.dart';
 import 'package:controller/screens/connect/connect.dart';
-import 'package:controller/screens/control.dart';
+import 'package:controller/screens/control/control.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
@@ -49,13 +50,31 @@ class Application extends StatefulWidget {
   State<Application> createState() => _ApplicationState();
 }
 
-class _ApplicationState extends State<Application> {
+class _ApplicationState extends State<Application>
+    with SingleTickerProviderStateMixin {
   late BluetoothDeviceManager bluetoothController;
   int _pageIndex = 0;
-  List<BluetoothDevice> availableDevices = [];
-  List<BluetoothDevice> connectedDevices = [];
+  List<ScanResult> availableDevices = [];
+  Color selectedColor = Colors.white;
+  late AnimationController animationController;
 
   _ApplicationState() {}
+
+  @override
+  void initState() {
+    super.initState();
+
+    animationController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 3000),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    animationController.dispose();
+    super.dispose();
+  }
 
   void _setPage(int pageIndex) {
     setState(() {
@@ -75,18 +94,20 @@ class _ApplicationState extends State<Application> {
     final screens = [
       Connect(
         availableDevices: this.availableDevices,
-
-        connectedDevices: this.connectedDevices,
-
-        onConnectedDevicesChanged: (devices) => setState(() {
-          this.connectedDevices = [...devices];
-        }),
-
         onAvailableDevicesChanged: (devices) => setState(() {
           this.availableDevices = [...devices];
         }),
       ),
-      Control(),
+      ColorScreen(
+        color: this.selectedColor,
+        animationController: this.animationController,
+        onColorSelected: (color) {
+          setState(() {
+            this.selectedColor = color;
+          });
+        },
+      ),
+      Control(color: this.selectedColor),
     ];
     return Scaffold(
       appBar: null,
@@ -106,6 +127,10 @@ class _ApplicationState extends State<Application> {
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.color_lens_sharp),
+            label: 'Color',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings_remote_outlined),
             label: 'Control',
           ),
         ],
