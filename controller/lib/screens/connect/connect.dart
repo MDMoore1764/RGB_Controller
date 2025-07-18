@@ -35,13 +35,9 @@ class Connect extends StatefulWidget {
 }
 
 class _ConnectState extends State<Connect> {
-  late double _timeDelay;
-  late int _offsetEvery;
-
   // final List<BluetoothDevice> _availableDevices = [];
   // final List<BluetoothDevice> _connectedDevices = [];
   final HashSet<String> _availableDeviceRemoteIDs = HashSet<String>();
-  final HashSet<String> _connectedDeviceRemoteIDs = HashSet<String>();
   final HashSet<String> _connectingDeviceRemoteIDs = HashSet<String>();
   final HashSet<String> _disconnectingDeviceRemoteIDs = HashSet<String>();
 
@@ -55,9 +51,6 @@ class _ConnectState extends State<Connect> {
   bool _scanning = false;
 
   _ConnectState() {
-    _timeDelay = 0;
-    _offsetEvery = 1;
-
     _deviceconnectionStates = HashMap<String, BluetoothConnectionState>();
   }
 
@@ -221,9 +214,6 @@ class _ConnectState extends State<Connect> {
               BluetoothConnectionState.connected;
     }).toList();
 
-    final timeDelayDisabled = resultsWithConnectedDevices.length <= 1;
-    final everyXDevicesDisabled = timeDelayDisabled || _timeDelay < 0.1;
-
     ScanButtonState scanButtonState = getScanbuttonState();
 
     print(_deviceconnectionStates);
@@ -271,8 +261,7 @@ class _ConnectState extends State<Connect> {
                       connecting: this._connectingDeviceRemoteIDs.contains(
                         scanResult.device.remoteId.str,
                       ),
-                      disconnecting: this._disconnectingDeviceRemoteIDs
-                          .contains(scanResult.device.remoteId.str),
+                      disconnecting: false,
                     ),
                   );
                 },
@@ -314,9 +303,7 @@ class _ConnectState extends State<Connect> {
                     child: DeviceCard(
                       scanResult: scanResult,
                       selected: true,
-                      connecting: this._connectingDeviceRemoteIDs.contains(
-                        scanResult.device.remoteId.str,
-                      ),
+                      connecting: false,
                       disconnecting: this._disconnectingDeviceRemoteIDs
                           .contains(scanResult.device.remoteId.str),
                     ),
@@ -324,94 +311,6 @@ class _ConnectState extends State<Connect> {
                 },
                 itemCount: resultsWithConnectedDevices.length,
               ),
-            ),
-
-            Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Text(
-                            timeDelayDisabled
-                                ? "Two or more devices required for time offset"
-                                : "Offset: ${_timeDelay.toStringAsFixed(1)} s",
-                          ),
-                          SizedBox(
-                            height: 50,
-                            child: RotatedBox(
-                              quarterTurns: 0,
-                              child: Slider(
-                                value: _timeDelay,
-                                min: 0.0,
-                                max: 5.0,
-                                divisions: (5.0 / 0.1).toInt(),
-                                label: "${_timeDelay.toStringAsFixed(1)} s",
-
-                                onChanged: timeDelayDisabled
-                                    ? null
-                                    : (double newValue) {
-                                        setState(() {
-                                          _timeDelay = newValue;
-                                        });
-                                      },
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Text(
-                            everyXDevicesDisabled
-                                ? "Offset required for device skip"
-                                : "Offset every${_offsetEvery == 1.0 ? ' other' : ' ${_offsetEvery.toStringAsFixed(0)}'} device${_offsetEvery == 1.0 ? '' : 's'}",
-                          ),
-                          RotatedBox(
-                            quarterTurns: 0,
-                            child: Slider(
-                              value: _offsetEvery.toDouble(),
-
-                              min: min(
-                                resultsWithConnectedDevices.length.toDouble(),
-                                1,
-                              ),
-                              max: max(
-                                resultsWithConnectedDevices.length.toDouble(),
-                                1,
-                              ),
-                              divisions: max(
-                                resultsWithConnectedDevices.length.toDouble(),
-                                1,
-                              ).toInt(),
-                              label:
-                                  "${_offsetEvery.toStringAsFixed(0)} devices",
-
-                              onChanged: everyXDevicesDisabled
-                                  ? null
-                                  : (double newValue) {
-                                      setState(() {
-                                        _offsetEvery = newValue.toInt();
-                                      });
-                                    },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
             ),
           ],
         ),
@@ -435,6 +334,10 @@ class _ConnectState extends State<Connect> {
   }
 
   Future<void> handleTryConnect(BluetoothDevice device) async {
+    if (_connectingDeviceRemoteIDs.contains(device.remoteId.str)) {
+      return;
+    }
+
     try {
       if (mounted) {
         setState(() {
@@ -462,6 +365,10 @@ class _ConnectState extends State<Connect> {
   }
 
   Future<void> handleTrydisconnect(BluetoothDevice device) async {
+    if (_disconnectingDeviceRemoteIDs.contains(device.remoteId.str)) {
+      return;
+    }
+
     try {
       if (mounted) {
         setState(() {
@@ -543,6 +450,8 @@ class _ConnectState extends State<Connect> {
 
     if (mounted) {
       setState(() {
+        _connectingDeviceRemoteIDs.remove(result.device.remoteId.str);
+        _disconnectingDeviceRemoteIDs.remove(result.device.remoteId.str);
         _deviceconnectionStates[result.device.remoteId.str] = state;
       });
     }

@@ -5,12 +5,16 @@ class AnimatedRainbowCheckbox extends StatefulWidget {
   void Function(Color) onColorSelected;
   final Color color;
   final AnimationController animationController;
+  final bool rainbowMode;
+  final void Function(bool) onSetRainbowMode;
 
   AnimatedRainbowCheckbox({
     super.key,
     required this.onColorSelected,
     required this.color,
     required this.animationController,
+    required this.rainbowMode,
+    required this.onSetRainbowMode,
   });
 
   @override
@@ -19,8 +23,6 @@ class AnimatedRainbowCheckbox extends StatefulWidget {
 }
 
 class _AnimatedRainbowCheckboxState extends State<AnimatedRainbowCheckbox> {
-  bool isChecked = false;
-
   @override
   void initState() {
     super.initState();
@@ -43,27 +45,10 @@ class _AnimatedRainbowCheckboxState extends State<AnimatedRainbowCheckbox> {
     super.dispose();
   }
 
-  void _sendControllerColor() {
-    final lightness = HSLColor.fromColor(widget.color).lightness;
-
-    final hue = 360 + widget.animationController.value * -360;
-    var color = HSLColor.fromAHSL(1.0, hue, 1.0, lightness);
-
-    widget.onColorSelected(color.toColor());
-  }
-
   void _onRainbowToggled(bool? value) {
     final firmValue = value ?? false;
 
-    if (firmValue) {
-      widget.animationController.addListener(_sendControllerColor);
-    } else {
-      widget.animationController.removeListener(_sendControllerColor);
-    }
-
-    setState(() {
-      isChecked = firmValue;
-    });
+    widget.onSetRainbowMode(firmValue);
   }
 
   @override
@@ -81,11 +66,11 @@ class _AnimatedRainbowCheckboxState extends State<AnimatedRainbowCheckbox> {
       animation: widget.animationController,
       builder: (context, _) {
         return CheckboxListTile(
-          value: isChecked,
+          value: widget.rainbowMode,
           tileColor: Theme.of(context).colorScheme.surface,
           onChanged: _onRainbowToggled,
           controlAffinity: ListTileControlAffinity.leading,
-          title: !isChecked
+          title: !widget.rainbowMode
               ? rainbowText
               : ShaderMask(
                   shaderCallback: (bounds) {

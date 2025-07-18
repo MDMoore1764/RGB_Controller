@@ -4,6 +4,9 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
 class ColorScreen extends StatefulWidget {
   void Function(Color) onColorSelected;
+  void Function(bool) onSetRainbowMode;
+
+  final bool raindowMode;
   final Color color;
   final AnimationController animationController;
 
@@ -12,6 +15,8 @@ class ColorScreen extends StatefulWidget {
     required this.onColorSelected,
     required this.color,
     required this.animationController,
+    required this.onSetRainbowMode,
+    required this.raindowMode,
   });
 
   @override
@@ -44,6 +49,8 @@ class _ColorScreenState extends State<ColorScreen> {
           onColorSelected: widget.onColorSelected,
           color: widget.color,
           animationController: widget.animationController,
+          onSetRainbowMode: widget.onSetRainbowMode,
+          rainbowMode: widget.raindowMode,
         ),
       ],
     );

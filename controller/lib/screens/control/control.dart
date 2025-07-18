@@ -1,23 +1,49 @@
+import 'dart:math';
+
+import 'package:controller/utilities/light_animation_type.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'light_animation.dart';
 
 class Control extends StatefulWidget {
   final Color color;
-  const Control({super.key, required this.color});
+  final List<ScanResult> availableDevices;
+
+  final double timeDelay;
+  final int offsetEvery;
+  final LightAnimationType selectedAnimation;
+  final void Function(LightAnimationType) onSelectAnimation;
+
+  void Function(double) ontimeDelayChange;
+  void Function(int) onOffsetEveryChange;
+
+  Control({
+    super.key,
+    required this.color,
+    required this.availableDevices,
+    required this.timeDelay,
+    required this.offsetEvery,
+    required this.onOffsetEveryChange,
+    required this.ontimeDelayChange,
+    required this.onSelectAnimation,
+    required this.selectedAnimation,
+  });
 
   @override
   State<Control> createState() => _ControlState();
 }
 
 class _ControlState extends State<Control> {
-  String selectedAnimation = "";
   final List<LightAnimation> _animations = [];
   _ControlState() {
     _animations.addAll(buildAnimations(send));
     _animations.sort();
+  }
 
-    selectedAnimation = _animations.first.name;
+  @override
+  void initState() {
+    super.initState();
   }
 
   void sendPattern(String patternName) {
@@ -27,153 +53,150 @@ class _ControlState extends State<Control> {
   void send(String pattern) {}
 
   List<LightAnimation> buildAnimations(void Function(String) onSend) {
-    return [
-      LightAnimation(
-        name: "Glow",
-        command: "glow",
-        icon: Icons.wb_incandescent,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Pulse",
-        command: "pulse",
-        icon: Icons.favorite,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Strobe",
-        command: "strobe",
-        icon: Icons.flash_on,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Fade",
-        command: "fade",
-        icon: Icons.blur_on,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Rainbow",
-        command: "rainbow",
-        icon: Icons.gradient,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Cycle",
-        command: "cycle",
-        icon: Icons.autorenew,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Breathe",
-        command: "breathe",
-        icon: Icons.air,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Wave",
-        command: "wave",
-        icon: Icons.water,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Fire",
-        command: "fire",
-        icon: Icons.local_fire_department,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Sparkle",
-        command: "sparkle",
-        icon: Icons.auto_awesome,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Flash",
-        command: "flash",
-        icon: Icons.bolt,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Chase",
-        command: "chase",
-        icon: Icons.directions_run,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Twinkle",
-        command: "twinkle",
-        icon: Icons.star_border,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Meteor",
-        command: "meteor",
-        icon: Icons.shower,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Scanner",
-        command: "scanner",
-        icon: Icons.scanner,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Comet",
-        command: "comet",
-        icon: Icons.travel_explore,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Wipe",
-        command: "wipe",
-        icon: Icons.border_horizontal,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Larson",
-        command: "larson",
-        icon: Icons.remove_red_eye,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Fireworks",
-        command: "fireworks",
-        icon: Icons.celebration,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Confetti",
-        command: "confetti",
-        icon: Icons.party_mode,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Ripple",
-        command: "ripple",
-        icon: Icons.waves,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "Noise",
-        command: "noise",
-        icon: Icons.graphic_eq,
-        onSend: onSend,
-      ),
-      LightAnimation(
-        name: "ILY",
-        command: "ily",
-        icon: Icons.favorite_outline_rounded,
-        onSend: onSend,
-      ),
-    ];
+    final iconMap = {
+      LightAnimationType.Flat: Icons.light_mode,
+      LightAnimationType.Glow: Icons.wb_incandescent,
+      LightAnimationType.Pulse: Icons.favorite,
+      LightAnimationType.Strobe: Icons.flash_on,
+      LightAnimationType.Fade: Icons.blur_on,
+      LightAnimationType.Rainbow: Icons.gradient,
+      LightAnimationType.Cycle: Icons.autorenew,
+      LightAnimationType.Breathe: Icons.air,
+      LightAnimationType.Wave: Icons.water,
+      LightAnimationType.Fire: Icons.local_fire_department,
+      LightAnimationType.Sparkle: Icons.auto_awesome,
+      LightAnimationType.Flash: Icons.bolt,
+      LightAnimationType.Chase: Icons.directions_run,
+      LightAnimationType.Twinkle: Icons.star_border,
+      LightAnimationType.Meteor: Icons.shower,
+      LightAnimationType.Scanner: Icons.scanner,
+      LightAnimationType.Comet: Icons.travel_explore,
+      LightAnimationType.Wipe: Icons.border_horizontal,
+      LightAnimationType.Larson: Icons.remove_red_eye,
+      LightAnimationType.Fireworks: Icons.celebration,
+      LightAnimationType.Confetti: Icons.party_mode,
+      LightAnimationType.Ripple: Icons.waves,
+      LightAnimationType.Noise: Icons.graphic_eq,
+      LightAnimationType.ILY: Icons.favorite_outline_rounded,
+    };
+
+    return LightAnimationType.values.map((type) {
+      return LightAnimation(type: type, icon: iconMap[type]!, onSend: onSend);
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    final resultsWithConnectedDevices = widget.availableDevices.where((d) {
+      return d.device.isConnected;
+    }).toList();
+
+    final notConnectedScanResults = widget.availableDevices.where((d) {
+      return d.device.isDisconnected;
+    }).toList();
+
+    final timeDelayDisabled = resultsWithConnectedDevices.length <= 1;
+    final everyXDevicesDisabledDueToOffset =
+        timeDelayDisabled || widget.timeDelay < 0.1;
+
+    final everyXDevicesDisabledDueToDeviceCount =
+        resultsWithConnectedDevices.length < 3;
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.start,
       children: [
+        Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text(
+                        timeDelayDisabled
+                            ? "Two or more devices required for time offset"
+                            : "Offset: ${widget.timeDelay.toStringAsFixed(1)} s",
+                      ),
+                      SizedBox(
+                        height: 50,
+                        child: RotatedBox(
+                          quarterTurns: 0,
+                          child: Slider(
+                            value: widget.timeDelay,
+                            min: 0.0,
+                            max: 5.0,
+                            divisions: (5.0 / 0.1).toInt(),
+                            label: "${widget.timeDelay.toStringAsFixed(1)} s",
+
+                            onChanged: timeDelayDisabled
+                                ? null
+                                : (double newValue) {
+                                    widget.ontimeDelayChange(newValue);
+                                  },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text(
+                        everyXDevicesDisabledDueToDeviceCount
+                            ? "At least three devices required for device skip"
+                            : everyXDevicesDisabledDueToOffset
+                            ? "Offset required for device skip"
+                            : "Offset every${widget.offsetEvery == 1 ? '' : ' ${widget.offsetEvery.toStringAsFixed(0)}'} device${widget.offsetEvery == 1 ? '' : 's'}",
+                      ),
+                      RotatedBox(
+                        quarterTurns: 0,
+                        child: Slider(
+                          value: widget.offsetEvery.toDouble(),
+
+                          min: min(
+                            resultsWithConnectedDevices.length.toDouble(),
+                            1,
+                          ),
+                          max: max(
+                            resultsWithConnectedDevices.length.toDouble() - 1,
+                            1,
+                          ),
+                          divisions: max(
+                            resultsWithConnectedDevices.length.toDouble() - 1,
+                            1,
+                          ).toInt(),
+                          label:
+                              "${widget.offsetEvery.toStringAsFixed(0)} devices",
+
+                          onChanged:
+                              everyXDevicesDisabledDueToDeviceCount ||
+                                  everyXDevicesDisabledDueToOffset
+                              ? null
+                              : (double newValue) {
+                                  setState(() {
+                                    widget.onOffsetEveryChange(
+                                      newValue.toInt(),
+                                    );
+                                  });
+                                },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+
         Expanded(
           child: Card(
             elevation: 1,
@@ -198,7 +221,7 @@ class _ControlState extends State<Control> {
                           child: Padding(
                             padding: const EdgeInsets.all(8.0),
                             child: Text(
-                              selectedAnimation,
+                              widget.selectedAnimation.name,
                               style: TextStyle(fontSize: 16),
                             ),
                           ),
@@ -224,15 +247,11 @@ class _ControlState extends State<Control> {
                         final icon = animation.icon;
 
                         final isSelected =
-                            this.selectedAnimation == animation.name;
+                            widget.selectedAnimation == animation.type;
 
                         return ElevatedButton(
                           onPressed: () {
-                            setState(() {
-                              selectedAnimation = animation.name;
-                            });
-
-                            animation.send();
+                            widget.onSelectAnimation(animation.type);
                           },
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.all(0),
