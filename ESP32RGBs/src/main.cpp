@@ -16,12 +16,14 @@ public:
   uint8_t red;
   uint8_t green;
   uint8_t blue;
+  String pattern;
   bool rainbow;
   DeviceSettings()
   {
     red = 255;
     green = 255;
     blue = 255;
+    pattern = "flat";
     rainbow = false;
   }
 
@@ -71,6 +73,16 @@ public:
       rainbowCharacteristic->notify();
     }
 
+    // COLOR_PATTERN_CHARACTERISTIC_UUID
+    auto patternCharacteristic = pServer->getServiceByUUID(COLOR_SERVICE_UUID)
+                                     ->getCharacteristic(COLOR_PATTERN_CHARACTERISTIC_UUID);
+    if (patternCharacteristic != nullptr)
+    {
+      String rainbowValue = deviceSettings->pattern;
+      patternCharacteristic->setValue(rainbowValue);
+      patternCharacteristic->notify();
+    }
+
     Serial.println("Client connected");
     Serial.printf("Connected client count: %d\n", pServer->getConnectedCount());
   };
@@ -109,6 +121,35 @@ public:
     int rainbowValue = this->deviceSettings->rainbowMode();
     pCharacteristic->setValue(rainbowValue);
     Serial.printf("Rainbow mode read as: %d\n", rainbowValue);
+  }
+};
+
+class PatternCallbacks : public BLECharacteristicCallbacks
+{
+private:
+  DeviceSettings *deviceSettings;
+
+public:
+  PatternCallbacks(DeviceSettings *deviceSettings)
+  {
+    this->deviceSettings = deviceSettings;
+  }
+
+  void onWrite(BLECharacteristic *pCharacteristic) override
+  {
+    String value = pCharacteristic->getValue();
+
+    if (value.length() > 0)
+    {
+      deviceSettings->pattern = value;
+      Serial.printf("Pattern set to: %s\n", deviceSettings->pattern.c_str());
+    }
+  }
+
+  void onRead(BLECharacteristic *pCharacteristic) override
+  {
+    pCharacteristic->setValue(deviceSettings->pattern);
+    Serial.printf("Pattern read as: %d\n", deviceSettings->pattern.c_str());
   }
 };
 
@@ -177,6 +218,16 @@ void setup()
   pRainbowModeChar->addDescriptor(pRainbowModeCharDescriptor);
   pRainbowModeChar->addDescriptor(new BLE2902());
   pRainbowModeChar->setCallbacks(new RainbowModeCallbacks(deviceSettings));
+
+  BLEDescriptor *pPatternCharDescriptor = new BLEDescriptor((uint16_t)0x2901);
+  pPatternCharDescriptor->setValue("The active color pattern.");
+
+  auto pPatternModeChar = pColorService->createCharacteristic(
+      COLOR_PATTERN_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+
+  pPatternModeChar->addDescriptor(pPatternCharDescriptor);
+  pPatternModeChar->addDescriptor(new BLE2902());
+  pPatternModeChar->setCallbacks(new PatternCallbacks(deviceSettings));
 
   pColorService->start();
 
