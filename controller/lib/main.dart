@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:ui';
 
+import 'package:controller/Services/color_service.dart';
 import 'package:controller/screens/color/color_screen.dart';
 import 'package:controller/screens/connect/bluetooth_device_manager.dart';
 import 'package:controller/screens/connect/connect.dart';
 import 'package:controller/screens/control/control.dart';
 import 'package:controller/utilities/bluetooth_device_utilities.dart';
 import 'package:controller/utilities/light_animation_type.dart';
+import 'package:controller/utilities/throttle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
@@ -78,9 +80,26 @@ class _ApplicationState extends State<Application>
 
   int _offsetEvery = 1;
   double _timeDelay = 3.0;
+  late void Function(Color) throttledColor;
+  late void Function(bool) throttledRainbowMode;
+  late void Function(String) throttledColorPattern;
 
   _ApplicationState() {
     deviceconnectionStates = HashMap<String, BluetoothConnectionState>();
+    throttledColor = throttle<Color>(
+      (c) => sendColorToConnectedDevices(c),
+      Duration(milliseconds: 100),
+    );
+
+    throttledRainbowMode = throttle<bool>(
+      (rainbowMode) => sendRainbowModeToConnectedDevices(rainbowMode),
+      Duration(milliseconds: 100),
+    );
+
+    throttledColorPattern = throttle<String>(
+      (pattern) => sendColorPatternToConnectedDevices(pattern),
+      Duration(milliseconds: 100),
+    );
   }
 
   @override
@@ -172,17 +191,22 @@ class _ApplicationState extends State<Application>
             this.animationController.addListener(_sendControllerColor);
           } else {
             this.animationController.removeListener(_sendControllerColor);
+            sendColorToConnectedDevices(this.selectedColor);
           }
 
           setState(() {
             this.rainbowMode = rainbowMode;
           });
+
+          throttledRainbowMode(rainbowMode);
         },
         animationController: this.animationController,
         onColorSelected: (color) {
           setState(() {
             this.selectedColor = color;
           });
+
+          throttledColor(color);
         },
       ),
       Control(
@@ -204,6 +228,8 @@ class _ApplicationState extends State<Application>
           setState(() {
             this.animationType = type;
           });
+
+          throttledColorPattern(type.command);
         },
         selectedAnimation: this.animationType,
       ),
@@ -303,9 +329,9 @@ class _ApplicationState extends State<Application>
 
   HashMap<String, StreamSubscription> deviceServiceSubs =
       HashMap<String, StreamSubscription>();
-  HashMap<String, HashMap<String, List<BluetoothCharacteristic>>>
-  characteristicsByServiceByDeviceID =
-      HashMap<String, HashMap<String, List<BluetoothCharacteristic>>>();
+  // HashMap<String, HashMap<String, List<BluetoothCharacteristic>>>
+  // characteristicsByServiceByDeviceID =
+  //     HashMap<String, HashMap<String, List<BluetoothCharacteristic>>>();
 
   void handleConnectionStateChanged(
     ScanResult result,
@@ -373,18 +399,46 @@ class _ApplicationState extends State<Application>
       if (result.device.isDisconnected) {
         return;
       }
-      final newServices = await result.device.discoverServices();
+      final newServices = await _discoverDeviceServicesOrDisconnect(
+        result.device,
+      );
       _handleNewServices(result.device, newServices);
     });
 
     deviceServiceSubs[result.device.remoteId.str] = deviceServiceSub;
 
-    final newServices = await result.device.discoverServices();
+    final newServices = await _discoverDeviceServicesOrDisconnect(
+      result.device,
+    );
     _handleNewServices(result.device, newServices);
 
     print(
       "************************* SERVICES DISCOVERED!!!!!!!!!!!!!!!!!!!!! *************************",
     );
+  }
+
+  Future<List<BluetoothService>> _discoverDeviceServicesOrDisconnect(
+    BluetoothDevice device,
+  ) async {
+    try {
+      return await device.discoverServices();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to discover services for ${getDeviceDisplayName(device)}: $e',
+            ),
+          ),
+        );
+      }
+
+      await device.disconnect();
+
+      return [];
+    }
+
+    throw Exception("Unreachable code error");
   }
 
   StreamSubscription<List<ScanResult>>? scanSubscription = null;
@@ -474,53 +528,189 @@ class _ApplicationState extends State<Application>
     BluetoothDevice device,
     List<BluetoothService> services,
   ) {
+    //Subscribe to services that notify, aka both the rainbow char and the color char of the color service:
     for (final service in services) {
-      if (!characteristicsByServiceByDeviceID.containsKey(
-        device.remoteId.str,
-      )) {
-        characteristicsByServiceByDeviceID[device.remoteId.str] =
-            HashMap<String, List<BluetoothCharacteristic>>();
-      }
-
-      if (!characteristicsByServiceByDeviceID[device.remoteId.str]!.containsKey(
-        service.serviceUuid.str,
-      )) {
-        characteristicsByServiceByDeviceID[device.remoteId.str]![service
-                .serviceUuid
-                .str] =
-            [];
-      }
-
       for (final characteristic in service.characteristics) {
-        characteristicsByServiceByDeviceID[device.remoteId.str]![service
-                .serviceUuid
-                .str]!
-            .add(characteristic);
+        if (characteristic.serviceUuid == colorServiceUUID &&
+            characteristic.characteristicUuid ==
+                rainbowModeCharacteristicUUID) {
+          //Subscribe!
+
+          //First read, then sub to the value.
+          characteristic.read().then((value) {
+            if (mounted) {
+              setState(() {
+                final firstValue = value[0];
+                if (mounted) {
+                  setState(() {
+                    this.rainbowMode = firstValue > 0;
+                  });
+                }
+              });
+            }
+          });
+
+          if (characteristic.isNotifying) {
+            characteristic.setNotifyValue(true);
+            final rainbowModeCharStream = characteristic.lastValueStream.listen(
+              (value) {
+                final firstValue = value[0];
+                if (mounted) {
+                  setState(() {
+                    this.rainbowMode = firstValue > 0;
+                  });
+                }
+              },
+            );
+
+            device.cancelWhenDisconnected(rainbowModeCharStream);
+          }
+
+          continue;
+        }
+
+        if (characteristic.serviceUuid == colorServiceUUID &&
+            characteristic.characteristicUuid == colorCharacteristicUUID) {
+          //First read, then sub.
+          characteristic.read().then((value) {
+            final b = value[0];
+            final g = value[1];
+            final r = value[2];
+            if (mounted) {
+              setState(() {
+                this.selectedColor = Color.fromARGB(255, r, g, b);
+              });
+            }
+          });
+
+          if (characteristic.isNotifying) {
+            //Subscribe!
+            characteristic.setNotifyValue(true);
+            final colorModeCharStream = characteristic.lastValueStream.listen((
+              value,
+            ) {
+              final b = value[0];
+              final g = value[1];
+              final r = value[2];
+              if (mounted) {
+                setState(() {
+                  this.selectedColor = Color.fromARGB(255, r, g, b);
+                });
+              }
+            });
+
+            device.cancelWhenDisconnected(colorModeCharStream);
+          }
+
+          continue;
+        }
+
+        if (characteristic.serviceUuid == colorServiceUUID &&
+            characteristic.characteristicUuid == patternCharacteristicUUID) {
+          //First read, then sub
+          characteristic.read().then((value) {
+            if (mounted) {
+              final stringValue = String.fromCharCodes(value);
+              setState(() {
+                this.animationType = LightAnimationType.values.firstWhere(
+                  (element) {
+                    return element.command == stringValue;
+                  },
+                  orElse: () {
+                    return LightAnimationType.Flat;
+                  },
+                );
+              });
+            }
+          });
+
+          if (characteristic.isNotifying) {
+            //Subscribe!
+            characteristic.setNotifyValue(true);
+            final patternCharStream = characteristic.lastValueStream.listen((
+              value,
+            ) {
+              if (mounted) {
+                final stringValue = String.fromCharCodes(value);
+                setState(() {
+                  this.animationType = LightAnimationType.values.firstWhere(
+                    (element) {
+                      return element.command == stringValue;
+                    },
+                    orElse: () {
+                      return LightAnimationType.Flat;
+                    },
+                  );
+                });
+              }
+            });
+
+            device.cancelWhenDisconnected(patternCharStream);
+          }
+
+          continue;
+        }
       }
     }
-
-    print("************* SErvices and chars gathered!!!");
-
-    print(characteristicsByServiceByDeviceID);
   }
 
-  Future<void> sendCommandToConnectedDevices() async {
+  Future<void> sendColorToConnectedDevices(Color color) async {
     final connectedDevices = this.availableDevices.where((element) {
       return element.device.isConnected;
     });
 
     for (final connectedDevice in connectedDevices) {
-      final deviceServices =
-          this.characteristicsByServiceByDeviceID[connectedDevice
-              .device
-              .remoteId
-              .str];
-
-      if (deviceServices == null) {
-        continue;
+      for (final service in connectedDevice.device.servicesList) {
+        for (final characteristic in service.characteristics) {
+          if (characteristic.serviceUuid == colorServiceUUID &&
+              characteristic.characteristicUuid == colorCharacteristicUUID) {
+            final r = (color.r * 255).floor();
+            final b = (color.b * 255).floor();
+            final g = (color.g * 255).floor();
+            await characteristic.write([r, g, b]);
+            return;
+          }
+        }
       }
+    }
+  }
 
-      //TODO: find the appropriate service ID and the appropriate characteristic and send the command.
+  Future<void> sendRainbowModeToConnectedDevices(bool rainbowModeActive) async {
+    final connectedDevices = this.availableDevices.where((element) {
+      return element.device.isConnected;
+    });
+
+    for (final connectedDevice in connectedDevices) {
+      for (final service in connectedDevice.device.servicesList) {
+        for (final characteristic in service.characteristics) {
+          if (characteristic.serviceUuid == colorServiceUUID &&
+              characteristic.characteristicUuid ==
+                  rainbowModeCharacteristicUUID) {
+            await characteristic.write(
+              rainbowModeActive ? "1".codeUnits : "0".codeUnits,
+            );
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> sendColorPatternToConnectedDevices(String colorPattern) async {
+    final connectedDevices = this.availableDevices.where((element) {
+      return element.device.isConnected;
+    });
+
+    for (final connectedDevice in connectedDevices) {
+      for (final service in connectedDevice.device.servicesList) {
+        for (final characteristic in service.characteristics) {
+          if (characteristic.serviceUuid == colorServiceUUID &&
+              characteristic.characteristicUuid == patternCharacteristicUUID) {
+            await characteristic.write(colorPattern.codeUnits);
+            return;
+          }
+        }
+      }
     }
   }
 }

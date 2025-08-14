@@ -1,0 +1,22 @@
+{
+    "[rocket-mvbasic]": {
+        "editor.codeLens": false
+    },
+    "files.associations": {
+        "*.c": "c",
+        "*.html": "html",
+        "*.asp": "vb",
+        "*.ts": "typescript",
+        "*.cs": "csharp",
+        "**/.rmv/config/*.json": "jsonc"
+    },
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true,
+        "**/.rmv/catalog/**": true,
+        "*/_*": false
+    }
+}
