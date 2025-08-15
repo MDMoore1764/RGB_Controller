@@ -6,7 +6,7 @@
 #include <Adafruit_NeoPixel.h>
 
 #define LED_PIN D10
-#define NUM_LEDS 30
+#define NUM_LEDS 100
 #define BRIGHTNESS 255
 
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -28,11 +28,11 @@ public:
   bool rainbow;
   DeviceSettings()
   {
-    red = 255;
-    green = 255;
-    blue = 255;
+    red = 0;
+    green = 0;
+    blue = 0;
     pattern = "flat";
-    interval = 500; // milliseconds
+    interval = 50; // milliseconds
     rainbow = false;
   }
 
@@ -205,13 +205,8 @@ public:
 
 class FlatPattern : public Pattern
 {
-
 public:
-  FlatPattern(DeviceSettings *settings)
-  {
-    this->settings = settings;
-  }
-
+  FlatPattern(DeviceSettings *settings) { this->settings = settings; }
   void update() override
   {
     strip.fill(strip.Color(settings->red, settings->green, settings->blue));
@@ -219,29 +214,585 @@ public:
   }
 };
 
-class FlashPattern : public Pattern
+class GlowPattern : public Pattern
 {
-  unsigned long lastToggle = 0;
-  bool on = false;
+  unsigned long lastUpdate = 0;
+  float brightness = 0;
+  float step = 0.02;
 
 public:
-  FlashPattern(DeviceSettings *settings)
-  {
-    this->settings = settings;
-  }
-
+  GlowPattern(DeviceSettings *settings) { this->settings = settings; }
   void update() override
   {
     unsigned long now = millis();
-    if (now - lastToggle < settings->interval)
-    {
+    if (now - lastUpdate < settings->interval)
       return;
-    }
+    lastUpdate = now;
 
-    lastToggle = now;
-    on = !on;
-    strip.fill(on ? strip.Color(settings->red, settings->green, settings->blue) : strip.Color(0, 0, 0));
+    brightness += step;
+    if (brightness >= 1.0 || brightness <= 0.0)
+      step = -step;
+    strip.fill(strip.Color(
+        uint8_t(settings->red * brightness),
+        uint8_t(settings->green * brightness),
+        uint8_t(settings->blue * brightness)));
     strip.show();
+  }
+};
+
+class PulsePattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  float brightness = 0;
+  float step = 0.05;
+
+public:
+  PulsePattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    brightness += step;
+    if (brightness >= 1.0 || brightness <= 0.0)
+      step = -step;
+    strip.fill(strip.Color(
+        uint8_t(settings->red * brightness),
+        uint8_t(settings->green * brightness),
+        uint8_t(settings->blue * brightness)));
+    strip.show();
+  }
+};
+
+class StrobePattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  bool on = false;
+
+public:
+  StrobePattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    on = !on;
+    strip.fill(on ? strip.Color(settings->red, settings->green, settings->blue)
+                  : strip.Color(0, 0, 0));
+    strip.show();
+  }
+};
+
+class FadePattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  float brightness = 0;
+  float step = 0.02;
+
+public:
+  FadePattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    brightness += step;
+    if (brightness >= 1.0 || brightness <= 0.0)
+      step = -step;
+    strip.fill(strip.Color(
+        uint8_t(settings->red * brightness),
+        uint8_t(settings->green * brightness),
+        uint8_t(settings->blue * brightness)));
+    strip.show();
+  }
+};
+
+class RainbowPattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  int offset = 0;
+
+public:
+  RainbowPattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    for (int i = 0; i < strip.numPixels(); i++)
+    {
+      strip.setPixelColor(i, strip.ColorHSV((i * 65536L / strip.numPixels() + offset)));
+    }
+    strip.show();
+    offset += 256;
+  }
+};
+
+class CyclePattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  int position = 0;
+
+public:
+  CyclePattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    strip.fill(strip.Color(0, 0, 0));
+    strip.setPixelColor(position, strip.Color(settings->red, settings->green, settings->blue));
+    strip.show();
+    position = (position + 1) % strip.numPixels();
+  }
+};
+
+class BreathePattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  float brightness = 0;
+  float step = 0.02;
+
+public:
+  BreathePattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    brightness += step;
+    if (brightness >= 1.0 || brightness <= 0.0)
+      step = -step;
+    strip.fill(strip.Color(
+        uint8_t(settings->red * brightness),
+        uint8_t(settings->green * brightness),
+        uint8_t(settings->blue * brightness)));
+    strip.show();
+  }
+};
+
+class WavePattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  int position = 0;
+
+public:
+  WavePattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    for (int i = 0; i < strip.numPixels(); i++)
+    {
+      float wave = sin((i + position) * 0.3) * 127 + 128;
+      strip.setPixelColor(i, strip.Color(
+                                 uint8_t(settings->red * wave / 255),
+                                 uint8_t(settings->green * wave / 255),
+                                 uint8_t(settings->blue * wave / 255)));
+    }
+    strip.show();
+    position += 1;
+  }
+};
+
+class FirePattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+
+public:
+  FirePattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    for (int i = 0; i < strip.numPixels(); i++)
+    {
+      int flicker = random(0, 50);
+      int r = min(settings->red + flicker, 255);
+      int g = min(settings->green + flicker / 2, 255);
+      int b = 0;
+      strip.setPixelColor(i, strip.Color(r, g, b));
+    }
+    strip.show();
+  }
+};
+
+class SparklePattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+
+public:
+  SparklePattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    for (int i = 0; i < strip.numPixels(); i++)
+    {
+      strip.setPixelColor(i, strip.Color(
+                                 settings->red / 2, settings->green / 2, settings->blue / 2));
+    }
+    int pos = random(strip.numPixels());
+    strip.setPixelColor(pos, strip.Color(settings->red, settings->green, settings->blue));
+    strip.show();
+  }
+};
+
+class FlashPattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  bool on = false;
+
+public:
+  FlashPattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    on = !on;
+    strip.fill(on ? strip.Color(settings->red, settings->green, settings->blue)
+                  : strip.Color(0, 0, 0));
+    strip.show();
+  }
+};
+
+class ChasePattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  int position = 0;
+
+public:
+  ChasePattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    strip.fill(strip.Color(0, 0, 0));
+    strip.setPixelColor(position, strip.Color(settings->red, settings->green, settings->blue));
+    strip.show();
+    position = (position + 1) % strip.numPixels();
+  }
+};
+
+class TwinklePattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+
+public:
+  TwinklePattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    int pos = random(strip.numPixels());
+    strip.setPixelColor(pos, strip.Color(settings->red, settings->green, settings->blue));
+    strip.show();
+  }
+};
+
+class MeteorPattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  int position = 0;
+
+public:
+  MeteorPattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    for (int i = 0; i < strip.numPixels(); i++)
+    {
+      strip.setPixelColor(i, strip.Color(
+                                 settings->red / 2, settings->green / 2, settings->blue / 2));
+    }
+    strip.setPixelColor(position, strip.Color(settings->red, settings->green, settings->blue));
+    strip.show();
+    position = (position + 1) % strip.numPixels();
+  }
+};
+
+class ScannerPattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  int position = 0;
+  bool forward = true;
+
+public:
+  ScannerPattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    strip.fill(strip.Color(0, 0, 0));
+    strip.setPixelColor(position, strip.Color(settings->red, settings->green, settings->blue));
+    strip.show();
+    if (forward)
+      position++;
+    else
+      position--;
+    if (position >= strip.numPixels())
+    {
+      position = strip.numPixels() - 1;
+      forward = false;
+    }
+    if (position < 0)
+    {
+      position = 0;
+      forward = true;
+    }
+  }
+};
+
+class CometPattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  int position = 0;
+
+public:
+  CometPattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    for (int i = 0; i < strip.numPixels(); i++)
+    {
+      uint32_t c = strip.getPixelColor(i);
+      strip.setPixelColor(i, (c >> 1) & 0x7F7F7F);
+    }
+    strip.setPixelColor(position, strip.Color(settings->red, settings->green, settings->blue));
+    strip.show();
+    position = (position + 1) % strip.numPixels();
+  }
+};
+
+class WipePattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  int position = 0;
+
+public:
+  WipePattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    if (position < strip.numPixels())
+    {
+      strip.setPixelColor(position, strip.Color(settings->red, settings->green, settings->blue));
+      strip.show();
+      position++;
+    }
+    else
+    {
+      position = 0;
+    }
+  }
+};
+
+class LarsonPattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  int position = 0;
+  int length = 5;
+  bool forward = true;
+
+public:
+  LarsonPattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    strip.fill(strip.Color(0, 0, 0));
+    for (int i = 0; i < length; i++)
+    {
+      int pos = position - i;
+      if (pos >= 0 && pos < strip.numPixels())
+      {
+        strip.setPixelColor(pos, strip.Color(settings->red, settings->green, settings->blue));
+      }
+    }
+    strip.show();
+    if (forward)
+      position++;
+    else
+      position--;
+    if (position >= strip.numPixels())
+      forward = false;
+    if (position <= 0)
+      forward = true;
+  }
+};
+
+class FireworksPattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+
+public:
+  FireworksPattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    for (int i = 0; i < strip.numPixels(); i++)
+    {
+      uint32_t c = strip.getPixelColor(i);
+      strip.setPixelColor(i, (c >> 1) & 0x7F7F7F);
+    }
+    if (random(255) < 50)
+    {
+      int pos = random(strip.numPixels());
+      strip.setPixelColor(pos, strip.Color(settings->red, settings->green, settings->blue));
+    }
+    strip.show();
+  }
+};
+
+class ConfettiPattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+
+public:
+  ConfettiPattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    for (int i = 0; i < strip.numPixels(); i++)
+    {
+      uint32_t c = strip.getPixelColor(i);
+      strip.setPixelColor(i, (c >> 1) & 0x7F7F7F);
+    }
+    int pos = random(strip.numPixels());
+    strip.setPixelColor(pos, strip.Color(settings->red, settings->green, settings->blue));
+    strip.show();
+  }
+};
+
+class RipplePattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  int position = 0;
+
+public:
+  RipplePattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    for (int i = 0; i < strip.numPixels(); i++)
+    {
+      int distance = abs(i - position);
+      int brightness = max(0, 255 - distance * 50);
+      strip.setPixelColor(i, strip.Color(
+                                 settings->red * brightness / 255,
+                                 settings->green * brightness / 255,
+                                 settings->blue * brightness / 255));
+    }
+    strip.show();
+    position = (position + 1) % strip.numPixels();
+  }
+};
+
+class NoisePattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+
+public:
+  NoisePattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    for (int i = 0; i < strip.numPixels(); i++)
+    {
+      strip.setPixelColor(i, strip.Color(
+                                 random(settings->red),
+                                 random(settings->green),
+                                 random(settings->blue)));
+    }
+    strip.show();
+  }
+};
+
+class ILYPattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  int pos = 0;
+
+public:
+  ILYPattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    // simple “heart-like” animation placeholder
+    strip.fill(strip.Color(0, 0, 0));
+    int mid = strip.numPixels() / 2;
+    for (int i = -1; i <= 1; i++)
+      strip.setPixelColor(mid + i + pos, strip.Color(settings->red, settings->green, settings->blue));
+    strip.show();
+    pos = (pos + 1) % strip.numPixels();
   }
 };
 
@@ -249,8 +800,52 @@ Pattern *createPattern(String name, DeviceSettings *settings)
 {
   if (name == "flat")
     return new FlatPattern(settings);
+  if (name == "glow")
+    return new GlowPattern(settings);
+  if (name == "pulse")
+    return new PulsePattern(settings);
+  if (name == "strobe")
+    return new StrobePattern(settings);
+  if (name == "fade")
+    return new FadePattern(settings);
+  if (name == "rainbow")
+    return new RainbowPattern(settings);
+  if (name == "cycle")
+    return new CyclePattern(settings);
+  if (name == "breathe")
+    return new BreathePattern(settings);
+  if (name == "wave")
+    return new WavePattern(settings);
+  if (name == "fire")
+    return new FirePattern(settings);
+  if (name == "sparkle")
+    return new SparklePattern(settings);
   if (name == "flash")
     return new FlashPattern(settings);
+  if (name == "chase")
+    return new ChasePattern(settings);
+  if (name == "twinkle")
+    return new TwinklePattern(settings);
+  if (name == "meteor")
+    return new MeteorPattern(settings);
+  if (name == "scanner")
+    return new ScannerPattern(settings);
+  if (name == "comet")
+    return new CometPattern(settings);
+  if (name == "wipe")
+    return new WipePattern(settings);
+  if (name == "larson")
+    return new LarsonPattern(settings);
+  if (name == "fireworks")
+    return new FireworksPattern(settings);
+  if (name == "confetti")
+    return new ConfettiPattern(settings);
+  if (name == "ripple")
+    return new RipplePattern(settings);
+  if (name == "noise")
+    return new NoisePattern(settings);
+  if (name == "ily")
+    return new ILYPattern(settings);
   return nullptr;
 }
 
@@ -312,6 +907,9 @@ Pattern *activePattern = nullptr;
 String currentPattern = "";
 void loop()
 {
+  auto brightness = (deviceSettings->red + deviceSettings->green + deviceSettings->blue) / 3;
+  strip.setBrightness(brightness);
+
   if (deviceSettings->pattern != currentPattern)
   {
     currentPattern = deviceSettings->pattern;
