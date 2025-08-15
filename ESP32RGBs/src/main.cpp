@@ -3,6 +3,13 @@
 #include <BLEDevice.h>
 #include <BLE2902.h>
 #include <BLEDescriptor.h>
+#include <Adafruit_NeoPixel.h>
+
+#define LED_PIN D10
+#define NUM_LEDS 30
+#define BRIGHTNESS 255
+
+Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // Create color service and characteristics
 #define COLOR_SERVICE_UUID "f9bbfc69-8184-4a4b-af62-f560441faf50"
@@ -16,6 +23,7 @@ public:
   uint8_t red;
   uint8_t green;
   uint8_t blue;
+  uint16_t interval;
   String pattern;
   bool rainbow;
   DeviceSettings()
@@ -24,6 +32,7 @@ public:
     green = 255;
     blue = 255;
     pattern = "flat";
+    interval = 500; // milliseconds
     rainbow = false;
   }
 
@@ -184,6 +193,68 @@ public:
   }
 };
 
+// PATTERNS
+
+class Pattern
+{
+public:
+  DeviceSettings *settings;
+  virtual void update() = 0;
+  virtual ~Pattern() {}
+};
+
+class FlatPattern : public Pattern
+{
+
+public:
+  FlatPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
+
+  void update() override
+  {
+    strip.fill(strip.Color(settings->red, settings->green, settings->blue));
+    strip.show();
+  }
+};
+
+class FlashPattern : public Pattern
+{
+  unsigned long lastToggle = 0;
+  bool on = false;
+
+public:
+  FlashPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
+
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastToggle < settings->interval)
+    {
+      return;
+    }
+
+    lastToggle = now;
+    on = !on;
+    strip.fill(on ? strip.Color(settings->red, settings->green, settings->blue) : strip.Color(0, 0, 0));
+    strip.show();
+  }
+};
+
+Pattern *createPattern(String name, DeviceSettings *settings)
+{
+  if (name == "flat")
+    return new FlatPattern(settings);
+  if (name == "flash")
+    return new FlashPattern(settings);
+  return nullptr;
+}
+
+// PATTERNS END
 BLEServer *pServer = nullptr;
 DeviceSettings *deviceSettings = nullptr;
 void setup()
@@ -237,6 +308,22 @@ void setup()
   Serial.printf("Server initialized with appId: %d\n", pServer->m_appId);
 }
 
+Pattern *activePattern = nullptr;
+String currentPattern = "";
 void loop()
 {
+  if (deviceSettings->pattern != currentPattern)
+  {
+    currentPattern = deviceSettings->pattern;
+    if (activePattern)
+    {
+      delete activePattern;
+    }
+    activePattern = createPattern(currentPattern, deviceSettings);
+  }
+
+  if (activePattern)
+  {
+    activePattern->update();
+  }
 }
