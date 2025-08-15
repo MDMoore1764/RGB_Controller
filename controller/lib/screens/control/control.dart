@@ -78,6 +78,10 @@ class _ControlState extends State<Control> {
       LightAnimationType.Ripple: Icons.waves,
       LightAnimationType.Noise: Icons.graphic_eq,
       LightAnimationType.ILY: Icons.favorite_outline_rounded,
+      LightAnimationType.Neon: Icons.bolt,
+      LightAnimationType.Sine: Icons.ssid_chart,
+      LightAnimationType.Blizzard: Icons.snowing,
+      LightAnimationType.Apoca: Icons.blur_on,
     };
 
     return LightAnimationType.values.map((type) {

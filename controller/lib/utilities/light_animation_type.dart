@@ -22,7 +22,11 @@ enum LightAnimationType {
   Confetti('confetti'),
   Ripple('ripple'),
   Noise('noise'),
-  ILY('ily');
+  ILY('ily'),
+  Apoca("apocalypse"),
+  Neon("broken_neon"),
+  Blizzard("blizzard"),
+  Sine("sine");
 
   final String command;
   const LightAnimationType(this.command);

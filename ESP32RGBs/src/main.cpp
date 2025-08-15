@@ -627,6 +627,8 @@ public:
     }
     else
     {
+      strip.fill(strip.Color(0, 0, 0));
+      strip.show();
       position = 0;
     }
   }
@@ -775,10 +777,66 @@ public:
 class ILYPattern : public Pattern
 {
   unsigned long lastUpdate = 0;
-  int pos = 0;
+  int burst = 0;
+  bool burstOn = false;
+  bool offPhase = false;
 
 public:
   ILYPattern(DeviceSettings *settings) { this->settings = settings; }
+
+  void update() override
+  {
+    unsigned long now = millis();
+
+    if (offPhase)
+    {
+      if (now - lastUpdate < settings->interval * 40)
+        return;
+
+      offPhase = false;
+      burstOn = false;
+      burst = 0;
+      lastUpdate = now;
+    }
+
+    if (now - lastUpdate < settings->interval * 15)
+      return;
+
+    lastUpdate = now;
+
+    if (burstOn)
+    {
+      strip.fill(strip.Color(0, 0, 0));
+      strip.show();
+      burstOn = false;
+      return;
+    }
+
+    if (burst < 3)
+    {
+      strip.fill(strip.Color(settings->red, settings->green, settings->blue));
+      strip.show();
+      burstOn = true;
+      burst++;
+    }
+    else
+    {
+      strip.fill(strip.Color(0, 0, 0));
+      strip.show();
+      offPhase = true;
+    }
+  }
+};
+
+class BrokenNeonPattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  unsigned long nextChange = 0;
+  bool isOn = false;
+
+public:
+  BrokenNeonPattern(DeviceSettings *settings) { this->settings = settings; }
+
   void update() override
   {
     unsigned long now = millis();
@@ -786,13 +844,161 @@ public:
       return;
     lastUpdate = now;
 
-    // simple “heart-like” animation placeholder
-    strip.fill(strip.Color(0, 0, 0));
-    int mid = strip.numPixels() / 2;
-    for (int i = -1; i <= 1; i++)
-      strip.setPixelColor(mid + i + pos, strip.Color(settings->red, settings->green, settings->blue));
+    if (now < nextChange)
+      return; // wait until it's time
+
+    if (isOn)
+    {
+      // turn off
+      strip.clear();
+      strip.show();
+      isOn = false;
+
+      // long OFF gap, randomized
+      unsigned long offTime = random(25, 100) * settings->interval;
+      nextChange = now + offTime;
+    }
+    else
+    {
+      // turn on with broken-neon flicker
+      for (int i = 0; i < strip.numPixels(); i++)
+      {
+        if (random(0, 100) < 70) // 70% chance pixel is ON
+          strip.setPixelColor(i, strip.Color(settings->red, settings->green, settings->blue));
+        else
+          strip.setPixelColor(i, 0); // some pixels stay dark
+      }
+      strip.show();
+      isOn = true;
+
+      // short ON burst, randomized
+      unsigned long onTime = random(10, 50) * settings->interval;
+      nextChange = now + onTime;
+    }
+  }
+};
+
+class ApocalypseLightning : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  int phase = 0;        // 0 = waiting, 1 = flickering
+  int flickerCount = 0; // how many flashes left
+  int startPixel = 0;
+  int segLength = 0;
+
+public:
+  ApocalypseLightning(DeviceSettings *settings) { this->settings = settings; }
+
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval * 5)
+      return;
+    lastUpdate = now;
+
+    if (phase == 0)
+    {
+      // 80% chance to stay off (big gaps)
+      if (random(0, 100) < 80)
+      {
+        strip.fill(strip.Color(0, 0, 0));
+        strip.show();
+        return;
+      }
+
+      // Start a flicker burst
+      startPixel = random(0, strip.numPixels());
+      segLength = max(1, strip.numPixels() / 5); // ~20%
+      flickerCount = random(3, 7);               // number of flashes
+      phase = 1;
+    }
+
+    if (phase == 1)
+    {
+      if (flickerCount <= 0)
+      {
+        strip.fill(strip.Color(0, 0, 0));
+        strip.show();
+        phase = 0;
+        return;
+      }
+
+      // Toggle on/off for shaky flicker
+      if (flickerCount % 2 == 0)
+      {
+        for (int i = 0; i < segLength; i++)
+        {
+          int idx = (startPixel + i) % strip.numPixels();
+          // shaky intensity
+          int r = random(settings->red / 2, settings->red);
+          int g = random(settings->green / 2, settings->green);
+          int b = random(settings->blue / 2, settings->blue);
+          strip.setPixelColor(idx, strip.Color(r, g, b));
+        }
+      }
+      else
+      {
+        strip.fill(strip.Color(0, 0, 0));
+      }
+      strip.show();
+      flickerCount--;
+    }
+  }
+};
+
+class SineWavePattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+  float phase = 0;
+
+public:
+  SineWavePattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    strip.clear();
+    int n = strip.numPixels();
+    for (int i = 0; i < n; i++)
+    {
+      float brightness = (sin(phase + (i * 0.3f)) + 1.0f) * 0.5f; // 0–1
+      int r = settings->red * brightness;
+      int g = settings->green * brightness;
+      int b = settings->blue * brightness;
+      strip.setPixelColor(i, strip.Color(r, g, b));
+    }
     strip.show();
-    pos = (pos + 1) % strip.numPixels();
+    phase += 0.2f;
+  }
+};
+
+class BlizzardPattern : public Pattern
+{
+  unsigned long lastUpdate = 0;
+
+public:
+  BlizzardPattern(DeviceSettings *settings) { this->settings = settings; }
+  void update() override
+  {
+    unsigned long now = millis();
+    if (now - lastUpdate < settings->interval)
+      return;
+    lastUpdate = now;
+
+    strip.clear();
+    int n = strip.numPixels();
+    int flicker = random(200, 256); // brightness variation
+    for (int i = 0; i < n; i++)
+    {
+      int r = (settings->red * flicker) / 255;
+      int g = (settings->green * flicker) / 255;
+      int b = (settings->blue * flicker) / 255;
+      strip.setPixelColor(i, strip.Color(r, g, b));
+    }
+    strip.show();
   }
 };
 
@@ -846,6 +1052,15 @@ Pattern *createPattern(String name, DeviceSettings *settings)
     return new NoisePattern(settings);
   if (name == "ily")
     return new ILYPattern(settings);
+  if (name == "broken_neon")
+    return new BrokenNeonPattern(settings);
+  if (name == "apocalypse")
+    return new ApocalypseLightning(settings);
+  if (name == "sine")
+    return new SineWavePattern(settings);
+  if (name == "blizzard")
+    return new BlizzardPattern(settings);
+
   return nullptr;
 }
 
