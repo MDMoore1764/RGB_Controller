@@ -7,7 +7,7 @@
 
 #define LED_PIN D10
 #define POWER_PIN D0
-#define NUM_LEDS 100
+#define NUM_LEDS 132
 #define BRIGHTNESS 255
 
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -1212,7 +1212,7 @@ void setup()
   pinMode(D0, OUTPUT);
   digitalWrite(D0, LOW);
 
-  BLEDevice::init("Frame 1");
+  BLEDevice::init("Mike and Maddie - 1");
 
   deviceSettings = new DeviceSettings();
   rainbowModeHandler = new RainbowModeHandler(deviceSettings);

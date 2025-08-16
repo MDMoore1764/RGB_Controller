@@ -546,67 +546,55 @@ class _ApplicationState extends State<Application>
     BluetoothDevice device,
     List<BluetoothService> services,
   ) {
-    //Subscribe to services that notify, aka both the rainbow char and the color char of the color service:
-    for (final service in services) {
-      for (final characteristic in service.characteristics) {
-        if (characteristic.serviceUuid == colorServiceUUID &&
-            characteristic.characteristicUuid ==
-                rainbowModeCharacteristicUUID) {
-          //Subscribe!
+    if (!device.isConnected) {
+      return;
+    }
 
-          //First read, then sub to the value.
-          characteristic.read().then((value) {
-            if (mounted) {
-              setState(() {
-                final firstValue = value[0];
-                if (mounted) {
-                  setState(() {
-                    this.rainbowMode = firstValue > 0;
+    try {
+      //Subscribe to services that notify, aka both the rainbow char and the color char of the color service:
+      for (final service in services) {
+        for (final characteristic in service.characteristics) {
+          if (characteristic.serviceUuid == colorServiceUUID &&
+              characteristic.characteristicUuid ==
+                  rainbowModeCharacteristicUUID) {
+            //Subscribe!
+
+            //First read, then sub to the value.
+            characteristic.read().then((value) {
+              if (mounted) {
+                setState(() {
+                  final firstValue = value[0];
+                  if (mounted) {
+                    setState(() {
+                      this.rainbowMode = firstValue > 0;
+                    });
+                  }
+                });
+              }
+            });
+
+            if (characteristic.isNotifying) {
+              characteristic.setNotifyValue(true);
+              final rainbowModeCharStream = characteristic.lastValueStream
+                  .listen((value) {
+                    final firstValue = value[0];
+                    if (mounted) {
+                      setState(() {
+                        this.rainbowMode = firstValue > 0;
+                      });
+                    }
                   });
-                }
-              });
+
+              device.cancelWhenDisconnected(rainbowModeCharStream);
             }
-          });
 
-          if (characteristic.isNotifying) {
-            characteristic.setNotifyValue(true);
-            final rainbowModeCharStream = characteristic.lastValueStream.listen(
-              (value) {
-                final firstValue = value[0];
-                if (mounted) {
-                  setState(() {
-                    this.rainbowMode = firstValue > 0;
-                  });
-                }
-              },
-            );
-
-            device.cancelWhenDisconnected(rainbowModeCharStream);
+            continue;
           }
 
-          continue;
-        }
-
-        if (characteristic.serviceUuid == colorServiceUUID &&
-            characteristic.characteristicUuid == colorCharacteristicUUID) {
-          //First read, then sub.
-          characteristic.read().then((value) {
-            final b = value[0];
-            final g = value[1];
-            final r = value[2];
-            if (mounted) {
-              setState(() {
-                this.selectedColor = Color.fromARGB(255, r, g, b);
-              });
-            }
-          });
-
-          if (characteristic.isNotifying) {
-            //Subscribe!
-            characteristic.setNotifyValue(true);
-            final colorModeCharStream = characteristic.lastValueStream.listen((
-              value,
-            ) {
+          if (characteristic.serviceUuid == colorServiceUUID &&
+              characteristic.characteristicUuid == colorCharacteristicUUID) {
+            //First read, then sub.
+            characteristic.read().then((value) {
               final b = value[0];
               final g = value[1];
               final r = value[2];
@@ -617,37 +605,32 @@ class _ApplicationState extends State<Application>
               }
             });
 
-            device.cancelWhenDisconnected(colorModeCharStream);
+            if (characteristic.isNotifying) {
+              //Subscribe!
+              characteristic.setNotifyValue(true);
+              final colorModeCharStream = characteristic.lastValueStream.listen(
+                (value) {
+                  final b = value[0];
+                  final g = value[1];
+                  final r = value[2];
+                  if (mounted) {
+                    setState(() {
+                      this.selectedColor = Color.fromARGB(255, r, g, b);
+                    });
+                  }
+                },
+              );
+
+              device.cancelWhenDisconnected(colorModeCharStream);
+            }
+
+            continue;
           }
 
-          continue;
-        }
-
-        if (characteristic.serviceUuid == colorServiceUUID &&
-            characteristic.characteristicUuid == patternCharacteristicUUID) {
-          //First read, then sub
-          characteristic.read().then((value) {
-            if (mounted) {
-              final stringValue = String.fromCharCodes(value);
-              setState(() {
-                this.animationType = LightAnimationType.values.firstWhere(
-                  (element) {
-                    return element.command == stringValue;
-                  },
-                  orElse: () {
-                    return LightAnimationType.Flat;
-                  },
-                );
-              });
-            }
-          });
-
-          if (characteristic.isNotifying) {
-            //Subscribe!
-            characteristic.setNotifyValue(true);
-            final patternCharStream = characteristic.lastValueStream.listen((
-              value,
-            ) {
+          if (characteristic.serviceUuid == colorServiceUUID &&
+              characteristic.characteristicUuid == patternCharacteristicUUID) {
+            //First read, then sub
+            characteristic.read().then((value) {
               if (mounted) {
                 final stringValue = String.fromCharCodes(value);
                 setState(() {
@@ -663,58 +646,82 @@ class _ApplicationState extends State<Application>
               }
             });
 
-            device.cancelWhenDisconnected(patternCharStream);
+            if (characteristic.isNotifying) {
+              //Subscribe!
+              characteristic.setNotifyValue(true);
+              final patternCharStream = characteristic.lastValueStream.listen((
+                value,
+              ) {
+                if (mounted) {
+                  final stringValue = String.fromCharCodes(value);
+                  setState(() {
+                    this.animationType = LightAnimationType.values.firstWhere(
+                      (element) {
+                        return element.command == stringValue;
+                      },
+                      orElse: () {
+                        return LightAnimationType.Flat;
+                      },
+                    );
+                  });
+                }
+              });
+
+              device.cancelWhenDisconnected(patternCharStream);
+            }
+
+            continue;
           }
 
-          continue;
-        }
-
-        if (characteristic.serviceUuid == colorServiceUUID &&
-            characteristic.characteristicUuid == rateCharacteristicUUID) {
-          //First read, then sub
-          characteristic.read().then((value) {
-            if (mounted) {
-              final stringValue = String.fromCharCodes(value);
-              // setState(() {
-              //   this.animationType = LightAnimationType.values.firstWhere(
-              //     (element) {
-              //       return element.command == stringValue;
-              //     },
-              //     orElse: () {
-              //       return LightAnimationType.Flat;
-              //     },
-              //   );
-              // });
-            }
-          });
-
-          if (characteristic.isNotifying) {
-            //Subscribe!
-            characteristic.setNotifyValue(true);
-            final patternCharStream = characteristic.lastValueStream.listen((
-              value,
-            ) {
-              // if (mounted) {
-              //   final stringValue = String.fromCharCodes(value);
-              //   setState(() {
-              //     this.animationType = LightAnimationType.values.firstWhere(
-              //       (element) {
-              //         return element.command == stringValue;
-              //       },
-              //       orElse: () {
-              //         return LightAnimationType.Flat;
-              //       },
-              //     );
-              //   });
-              // }
+          if (characteristic.serviceUuid == colorServiceUUID &&
+              characteristic.characteristicUuid == rateCharacteristicUUID) {
+            //First read, then sub
+            characteristic.read().then((value) {
+              if (mounted) {
+                final stringValue = String.fromCharCodes(value);
+                // setState(() {
+                //   this.animationType = LightAnimationType.values.firstWhere(
+                //     (element) {
+                //       return element.command == stringValue;
+                //     },
+                //     orElse: () {
+                //       return LightAnimationType.Flat;
+                //     },
+                //   );
+                // });
+              }
             });
 
-            device.cancelWhenDisconnected(patternCharStream);
-          }
+            if (characteristic.isNotifying) {
+              //Subscribe!
+              characteristic.setNotifyValue(true);
+              final patternCharStream = characteristic.lastValueStream.listen((
+                value,
+              ) {
+                // if (mounted) {
+                //   final stringValue = String.fromCharCodes(value);
+                //   setState(() {
+                //     this.animationType = LightAnimationType.values.firstWhere(
+                //       (element) {
+                //         return element.command == stringValue;
+                //       },
+                //       orElse: () {
+                //         return LightAnimationType.Flat;
+                //       },
+                //     );
+                //   });
+                // }
+              });
 
-          continue;
+              device.cancelWhenDisconnected(patternCharStream);
+            }
+
+            continue;
+          }
         }
       }
+    } catch (e) {
+      //do nothing, it's cool :)
     }
   }
 
