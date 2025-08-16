@@ -12,11 +12,13 @@ class Control extends StatefulWidget {
 
   final double timeDelay;
   final int offsetEvery;
+  final double rate;
   final LightAnimationType selectedAnimation;
   final void Function(LightAnimationType) onSelectAnimation;
 
   void Function(double) ontimeDelayChange;
   void Function(int) onOffsetEveryChange;
+  void Function(double) onRateChange;
 
   Control({
     super.key,
@@ -28,6 +30,8 @@ class Control extends StatefulWidget {
     required this.ontimeDelayChange,
     required this.onSelectAnimation,
     required this.selectedAnimation,
+    required this.rate,
+    required this.onRateChange,
   });
 
   @override
@@ -60,26 +64,26 @@ class _ControlState extends State<Control> {
       LightAnimationType.Strobe: Icons.flash_on,
       LightAnimationType.Fade: Icons.blur_on,
       LightAnimationType.Rainbow: Icons.gradient,
-      LightAnimationType.Cycle: Icons.autorenew,
-      LightAnimationType.Breathe: Icons.air,
+      // LightAnimationType.Cycle: Icons.autorenew,
+      // LightAnimationType.Breathe: Icons.air,
       LightAnimationType.Wave: Icons.water,
       LightAnimationType.Fire: Icons.local_fire_department,
       LightAnimationType.Sparkle: Icons.auto_awesome,
-      LightAnimationType.Flash: Icons.bolt,
+      // LightAnimationType.Flash: Icons.bolt,
       LightAnimationType.Chase: Icons.directions_run,
       LightAnimationType.Twinkle: Icons.star_border,
       LightAnimationType.Meteor: Icons.shower,
       LightAnimationType.Scanner: Icons.scanner,
       LightAnimationType.Comet: Icons.travel_explore,
       LightAnimationType.Wipe: Icons.border_horizontal,
-      LightAnimationType.Larson: Icons.remove_red_eye,
-      LightAnimationType.Fireworks: Icons.celebration,
+      LightAnimationType.Sweep: Icons.remove_red_eye,
+      LightAnimationType.Fwerks: Icons.celebration,
       LightAnimationType.Confetti: Icons.party_mode,
       LightAnimationType.Ripple: Icons.waves,
       LightAnimationType.Noise: Icons.graphic_eq,
       LightAnimationType.ILY: Icons.favorite_outline_rounded,
       LightAnimationType.Neon: Icons.bolt,
-      LightAnimationType.Sine: Icons.ssid_chart,
+      // LightAnimationType.Sine: Icons.ssid_chart,
       LightAnimationType.Blizzard: Icons.snowing,
       LightAnimationType.Apoca: Icons.blur_on,
     };
@@ -165,18 +169,9 @@ class _ControlState extends State<Control> {
                         child: Slider(
                           value: widget.offsetEvery.toDouble(),
 
-                          min: min(
-                            resultsWithConnectedDevices.length.toDouble(),
-                            1,
-                          ),
-                          max: max(
-                            resultsWithConnectedDevices.length.toDouble() - 1,
-                            1,
-                          ),
-                          divisions: max(
-                            resultsWithConnectedDevices.length.toDouble() - 1,
-                            1,
-                          ).toInt(),
+                          min: 0,
+                          max: 2,
+                          divisions: 19,
                           label:
                               "${widget.offsetEvery.toStringAsFixed(0)} devices",
 
@@ -191,6 +186,35 @@ class _ControlState extends State<Control> {
                                     );
                                   });
                                 },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text("Pattern Rate"),
+                      RotatedBox(
+                        quarterTurns: 0,
+                        child: Slider(
+                          value: widget.rate.toDouble(),
+
+                          min: 1,
+                          max: 10,
+                          divisions: 98,
+                          label: "${widget.rate.toStringAsFixed(2)}",
+
+                          onChanged: (double newValue) {
+                            setState(() {
+                              widget.onRateChange(newValue);
+                            });
+                          },
                         ),
                       ),
                     ],

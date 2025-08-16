@@ -6,6 +6,7 @@
 #include <Adafruit_NeoPixel.h>
 
 #define LED_PIN D10
+#define POWER_PIN D0
 #define NUM_LEDS 100
 #define BRIGHTNESS 255
 
@@ -15,11 +16,13 @@ Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 #define COLOR_SERVICE_UUID "f9bbfc69-8184-4a4b-af62-f560441faf50"
 #define COLOR_CHARACTERISTIC_UUID "6cb02075-6a70-4f34-a51f-15120e7e1e2f"
 #define COLOR_PATTERN_CHARACTERISTIC_UUID "ac1d5ac2-1641-4a96-9297-73a3fda2a664"
+#define PATTERN_RATE_CHARACTERISTIC_UUID "ac1d5ac2-1641-4a96-9297-73a3fda2a663"
 #define RAINBOW_MODE_CHARACTERISTIC_UUID "ac1d5ac2-1641-4a96-9297-73a3fda2a665"
 
 class DeviceSettings
 {
 public:
+  static uint16_t const baseInterval = 50; // milliseconds
   uint8_t red;
   uint8_t green;
   uint8_t blue;
@@ -87,9 +90,19 @@ public:
                                      ->getCharacteristic(COLOR_PATTERN_CHARACTERISTIC_UUID);
     if (patternCharacteristic != nullptr)
     {
-      String rainbowValue = deviceSettings->pattern;
-      patternCharacteristic->setValue(rainbowValue);
+      String pattern = deviceSettings->pattern;
+      patternCharacteristic->setValue(pattern);
       patternCharacteristic->notify();
+    }
+
+    // PATTERN_RATE_CHARACTERISTIC_UUID
+    auto patternRateCharacteristic = pServer->getServiceByUUID(COLOR_SERVICE_UUID)
+                                         ->getCharacteristic(PATTERN_RATE_CHARACTERISTIC_UUID);
+    if (patternRateCharacteristic != nullptr)
+    {
+      auto interval = deviceSettings->interval;
+      patternRateCharacteristic->setValue(interval);
+      patternRateCharacteristic->notify();
     }
 
     Serial.println("Client connected");
@@ -159,6 +172,43 @@ public:
   {
     pCharacteristic->setValue(deviceSettings->pattern);
     Serial.printf("Pattern read as: %d\n", deviceSettings->pattern.c_str());
+  }
+};
+
+class PatternRateCallbacks : public BLECharacteristicCallbacks
+{
+private:
+  DeviceSettings *deviceSettings;
+
+public:
+  PatternRateCallbacks(DeviceSettings *deviceSettings)
+  {
+    this->deviceSettings = deviceSettings;
+  }
+
+  void onWrite(BLECharacteristic *pCharacteristic) override
+  {
+    String value = pCharacteristic->getValue(); // Arduino String
+
+    if (value.length() == 8)
+    {
+      double receivedDouble;
+      memcpy(&receivedDouble, value.c_str(), sizeof(double));
+      this->deviceSettings->interval = static_cast<uint16_t>(receivedDouble * DeviceSettings::baseInterval);
+
+      Serial.print("Received double: ");
+      Serial.println(receivedDouble, 6);
+    }
+    else
+    {
+      Serial.println("Received data length mismatch!");
+    }
+  }
+
+  void onRead(BLECharacteristic *pCharacteristic) override
+  {
+    pCharacteristic->setValue(deviceSettings->interval);
+    Serial.printf("Pattern rate read as: %i\n", deviceSettings->interval);
   }
 };
 
@@ -233,9 +283,9 @@ public:
     if (brightness >= 1.0 || brightness <= 0.0)
       step = -step;
     strip.fill(strip.Color(
-        uint8_t(settings->red * brightness),
-        uint8_t(settings->green * brightness),
-        uint8_t(settings->blue * brightness)));
+        uint8_t(floor(settings->red * brightness) - 1),
+        uint8_t(floor(settings->green * brightness) - 1),
+        uint8_t(floor(settings->blue * brightness) - 1)));
     strip.show();
   }
 };
@@ -1002,6 +1052,93 @@ public:
   }
 };
 
+class RainbowModeHandler
+{
+private:
+  unsigned long lastUpdate = 0;
+  DeviceSettings *settings;
+  int offset = 0;
+
+  void hsvToRgb(uint16_t h, uint8_t s, uint8_t v, uint8_t &r, uint8_t &g, uint8_t &b)
+  {
+    float hf = (float)h / 60.0f; // hue sector 0..6
+    int i = (int)hf;
+    float f = hf - i;
+    float p = v * (1.0f - (s / 255.0f));
+    float q = v * (1.0f - f * (s / 255.0f));
+    float t = v * (1.0f - (1.0f - f) * (s / 255.0f));
+
+    switch (i % 6)
+    {
+    case 0:
+      r = v;
+      g = t;
+      b = p;
+      break;
+    case 1:
+      r = q;
+      g = v;
+      b = p;
+      break;
+    case 2:
+      r = p;
+      g = v;
+      b = t;
+      break;
+    case 3:
+      r = p;
+      g = q;
+      b = v;
+      break;
+    case 4:
+      r = t;
+      g = p;
+      b = v;
+      break;
+    case 5:
+      r = v;
+      g = p;
+      b = q;
+      break;
+    }
+  }
+
+public:
+  RainbowModeHandler(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
+
+  void update()
+  {
+
+    if (!this->settings->rainbow)
+    {
+      return;
+    }
+
+    unsigned long now = millis();
+    if (now - lastUpdate < this->settings->interval / 2)
+    {
+      return;
+    }
+
+    static uint16_t hue = 0;
+    hue = (hue + 1) % 360;
+
+    uint8_t r, g, b;
+    hsvToRgb(hue, 255, 255, r, g, b);
+
+    settings->red = r;
+    settings->green = g;
+    settings->blue = b;
+
+    lastUpdate = now;
+
+    offset += 256;
+  }
+};
+
 Pattern *createPattern(String name, DeviceSettings *settings)
 {
   if (name == "flat")
@@ -1067,13 +1204,18 @@ Pattern *createPattern(String name, DeviceSettings *settings)
 // PATTERNS END
 BLEServer *pServer = nullptr;
 DeviceSettings *deviceSettings = nullptr;
+RainbowModeHandler *rainbowModeHandler = nullptr;
 void setup()
 {
   Serial.begin(115200);
 
+  pinMode(D0, OUTPUT);
+  digitalWrite(D0, LOW);
+
   BLEDevice::init("Frame 1");
 
   deviceSettings = new DeviceSettings();
+  rainbowModeHandler = new RainbowModeHandler(deviceSettings);
   pServer = BLEDevice::createServer();
 
   pServer->setCallbacks(new ServerCallbacks(deviceSettings));
@@ -1110,6 +1252,20 @@ void setup()
   pPatternModeChar->addDescriptor(new BLE2902());
   pPatternModeChar->setCallbacks(new PatternCallbacks(deviceSettings));
 
+  // SECTION Pattern Rate Characteristic
+
+  BLEDescriptor *pPatternRateCharDescriptor = new BLEDescriptor((uint16_t)0x2901);
+  pPatternRateCharDescriptor->setValue("The active color pattern.");
+
+  auto pPatternRateChar = pColorService->createCharacteristic(
+      PATTERN_RATE_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+
+  pPatternRateChar->addDescriptor(pPatternRateCharDescriptor);
+  pPatternRateChar->addDescriptor(new BLE2902());
+  pPatternRateChar->setCallbacks(new PatternRateCallbacks(deviceSettings));
+
+  // !SECTION
+
   pColorService->start();
 
   pServer->startAdvertising();
@@ -1120,10 +1276,33 @@ void setup()
 
 Pattern *activePattern = nullptr;
 String currentPattern = "";
+bool isOff = false;
 void loop()
 {
   auto brightness = (deviceSettings->red + deviceSettings->green + deviceSettings->blue) / 3;
   strip.setBrightness(brightness);
+
+  if (brightness <= 3 && !isOff)
+  {
+    strip.fill(strip.Color(0, 0, 0));
+    strip.show();
+
+    digitalWrite(D0, LOW);
+    digitalWrite(D10, LOW);
+    isOff = true;
+  }
+  else if (brightness > 3 && isOff)
+  {
+    isOff = false;
+    digitalWrite(D0, HIGH);
+    digitalWrite(D10, HIGH);
+  }
+
+  if (isOff)
+  {
+    delay(250);
+    return;
+  }
 
   if (deviceSettings->pattern != currentPattern)
   {
@@ -1137,6 +1316,7 @@ void loop()
 
   if (activePattern)
   {
+    rainbowModeHandler->update();
     activePattern->update();
   }
 }

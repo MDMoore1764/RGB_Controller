@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:math';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:controller/Services/color_service.dart';
@@ -78,11 +80,14 @@ class _ApplicationState extends State<Application>
   late bool rainbowMode = false;
   bool scanning = false;
 
+  double _rate = 5.5;
+
   int _offsetEvery = 1;
   double _timeDelay = 3.0;
   late void Function(Color) throttledColor;
   late void Function(bool) throttledRainbowMode;
   late void Function(String) throttledColorPattern;
+  late void Function(double) throttledRate;
 
   _ApplicationState() {
     deviceconnectionStates = HashMap<String, BluetoothConnectionState>();
@@ -98,6 +103,11 @@ class _ApplicationState extends State<Application>
 
     throttledColorPattern = throttle<String>(
       (pattern) => sendColorPatternToConnectedDevices(pattern),
+      Duration(milliseconds: 100),
+    );
+
+    throttledRate = throttle<double>(
+      (rate) => sendRateToConnectedDevices(rate),
       Duration(milliseconds: 100),
     );
   }
@@ -214,6 +224,14 @@ class _ApplicationState extends State<Application>
         availableDevices: this.availableDevices,
         offsetEvery: this._offsetEvery,
         timeDelay: this._timeDelay,
+        rate: this._rate,
+        onRateChange: (newRate) {
+          setState(() {
+            this._rate = newRate;
+          });
+
+          throttledRate(newRate);
+        },
         onOffsetEveryChange: (offsetEvery) {
           setState(() {
             this._offsetEvery = offsetEvery;
@@ -650,6 +668,52 @@ class _ApplicationState extends State<Application>
 
           continue;
         }
+
+        if (characteristic.serviceUuid == colorServiceUUID &&
+            characteristic.characteristicUuid == rateCharacteristicUUID) {
+          //First read, then sub
+          characteristic.read().then((value) {
+            if (mounted) {
+              final stringValue = String.fromCharCodes(value);
+              // setState(() {
+              //   this.animationType = LightAnimationType.values.firstWhere(
+              //     (element) {
+              //       return element.command == stringValue;
+              //     },
+              //     orElse: () {
+              //       return LightAnimationType.Flat;
+              //     },
+              //   );
+              // });
+            }
+          });
+
+          if (characteristic.isNotifying) {
+            //Subscribe!
+            characteristic.setNotifyValue(true);
+            final patternCharStream = characteristic.lastValueStream.listen((
+              value,
+            ) {
+              // if (mounted) {
+              //   final stringValue = String.fromCharCodes(value);
+              //   setState(() {
+              //     this.animationType = LightAnimationType.values.firstWhere(
+              //       (element) {
+              //         return element.command == stringValue;
+              //       },
+              //       orElse: () {
+              //         return LightAnimationType.Flat;
+              //       },
+              //     );
+              //   });
+              // }
+            });
+
+            device.cancelWhenDisconnected(patternCharStream);
+          }
+
+          continue;
+        }
       }
     }
   }
@@ -658,21 +722,22 @@ class _ApplicationState extends State<Application>
     final connectedDevices = this.availableDevices.where((element) {
       return element.device.isConnected;
     });
-
-    for (final connectedDevice in connectedDevices) {
-      for (final service in connectedDevice.device.servicesList) {
-        for (final characteristic in service.characteristics) {
-          if (characteristic.serviceUuid == colorServiceUUID &&
-              characteristic.characteristicUuid == colorCharacteristicUUID) {
-            final r = (color.r * 255).floor();
-            final b = (color.b * 255).floor();
-            final g = (color.g * 255).floor();
-            await characteristic.write([r, g, b]);
-            return;
+    try {
+      for (final connectedDevice in connectedDevices) {
+        for (final service in connectedDevice.device.servicesList) {
+          for (final characteristic in service.characteristics) {
+            if (characteristic.serviceUuid == colorServiceUUID &&
+                characteristic.characteristicUuid == colorCharacteristicUUID) {
+              final r = (color.r * 255).floor();
+              final b = (color.b * 255).floor();
+              final g = (color.g * 255).floor();
+              await characteristic.write([r, g, b]);
+              return;
+            }
           }
         }
       }
-    }
+    } catch (e) {}
   }
 
   Future<void> sendRainbowModeToConnectedDevices(bool rainbowModeActive) async {
@@ -700,18 +765,44 @@ class _ApplicationState extends State<Application>
     final connectedDevices = this.availableDevices.where((element) {
       return element.device.isConnected;
     });
-
-    for (final connectedDevice in connectedDevices) {
-      for (final service in connectedDevice.device.servicesList) {
-        for (final characteristic in service.characteristics) {
-          if (characteristic.serviceUuid == colorServiceUUID &&
-              characteristic.characteristicUuid == patternCharacteristicUUID) {
-            await characteristic.write(colorPattern.codeUnits);
-            return;
+    try {
+      for (final connectedDevice in connectedDevices) {
+        for (final service in connectedDevice.device.servicesList) {
+          for (final characteristic in service.characteristics) {
+            if (characteristic.serviceUuid == colorServiceUUID &&
+                characteristic.characteristicUuid ==
+                    patternCharacteristicUUID) {
+              await characteristic.write(colorPattern.codeUnits);
+              return;
+            }
           }
         }
       }
-    }
+    } catch (e) {}
+  }
+
+  Future<void> sendRateToConnectedDevices(double rate) async {
+    final connectedDevices = this.availableDevices.where((element) {
+      return element.device.isConnected;
+    });
+
+    try {
+      for (final connectedDevice in connectedDevices) {
+        for (final service in connectedDevice.device.servicesList) {
+          for (final characteristic in service.characteristics) {
+            if (characteristic.serviceUuid == colorServiceUUID &&
+                characteristic.characteristicUuid == rateCharacteristicUUID) {
+              final byteData = ByteData(8);
+
+              final adjustedRate = pow(2, (rate - 5.5) / 1.5).toDouble();
+              byteData.setFloat64(0, adjustedRate, Endian.little);
+              await characteristic.write(byteData.buffer.asInt8List());
+              return;
+            }
+          }
+        }
+      }
+    } catch (e) {}
   }
 }
 
