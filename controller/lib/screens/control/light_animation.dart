@@ -1,4 +1,4 @@
-import 'package:controller/utilities/light_animation_type.dart';
+import 'package:frame_control/utilities/light_animation_type.dart';
 import 'package:flutter/material.dart';
 
 class LightAnimation implements Comparable<LightAnimation> {

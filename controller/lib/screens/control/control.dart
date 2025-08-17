@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import 'package:controller/utilities/light_animation_type.dart';
+import 'package:frame_control/utilities/light_animation_type.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 

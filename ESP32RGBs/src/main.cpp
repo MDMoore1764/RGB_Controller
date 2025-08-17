@@ -1212,7 +1212,7 @@ void setup()
   pinMode(D0, OUTPUT);
   digitalWrite(D0, LOW);
 
-  BLEDevice::init("Mike and Maddie - 1");
+  BLEDevice::init("M and M - Frame 1");
 
   deviceSettings = new DeviceSettings();
   rainbowModeHandler = new RainbowModeHandler(deviceSettings);
@@ -1268,8 +1268,12 @@ void setup()
 
   pColorService->start();
 
-  pServer->startAdvertising();
-  pServer->getAdvertising()->start();
+  auto advertisement = pServer->getAdvertising();
+  advertisement->addServiceUUID(COLOR_SERVICE_UUID);
+  advertisement->setScanResponse(true);
+  advertisement->setMinPreferred(0x06); // functions that help with iPhone connections issue
+
+  advertisement->start();
 
   Serial.printf("Server initialized with appId: %d\n", pServer->m_appId);
 }

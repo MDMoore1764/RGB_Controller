@@ -3,9 +3,9 @@ import 'dart:collection';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:controller/screens/connect/device_card.dart';
-import 'package:controller/screens/connect/scan_button_state.dart';
-import 'package:controller/utilities/bluetooth_device_utilities.dart';
+import 'package:frame_control/screens/connect/device_card.dart';
+import 'package:frame_control/screens/connect/scan_button_state.dart';
+import 'package:frame_control/utilities/bluetooth_device_utilities.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 

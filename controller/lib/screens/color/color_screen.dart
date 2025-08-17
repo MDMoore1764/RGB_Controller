@@ -1,4 +1,4 @@
-import 'package:controller/screens/color/components/rainbow_checkbox.dart';
+import 'package:frame_control/screens/color/components/rainbow_checkbox.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 

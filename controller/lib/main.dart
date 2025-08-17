@@ -4,14 +4,14 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui';
 
-import 'package:controller/Services/color_service.dart';
-import 'package:controller/screens/color/color_screen.dart';
-import 'package:controller/screens/connect/bluetooth_device_manager.dart';
-import 'package:controller/screens/connect/connect.dart';
-import 'package:controller/screens/control/control.dart';
-import 'package:controller/utilities/bluetooth_device_utilities.dart';
-import 'package:controller/utilities/light_animation_type.dart';
-import 'package:controller/utilities/throttle.dart';
+import 'package:frame_control/Services/color_service.dart';
+import 'package:frame_control/screens/color/color_screen.dart';
+import 'package:frame_control/screens/connect/bluetooth_device_manager.dart';
+import 'package:frame_control/screens/connect/connect.dart';
+import 'package:frame_control/screens/control/control.dart';
+import 'package:frame_control/utilities/bluetooth_device_utilities.dart';
+import 'package:frame_control/utilities/light_animation_type.dart';
+import 'package:frame_control/utilities/throttle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
@@ -537,7 +537,7 @@ class _ApplicationState extends State<Application>
     });
 
     await FlutterBluePlus.startScan(
-      withServices: filterByServiceUuid != null ? [filterByServiceUuid] : [],
+      withServices: [colorServiceUUID],
       timeout: Duration(seconds: scanDurationSeconds),
     );
   }
@@ -560,18 +560,21 @@ class _ApplicationState extends State<Application>
             //Subscribe!
 
             //First read, then sub to the value.
-            characteristic.read().then((value) {
-              if (mounted) {
-                setState(() {
-                  final firstValue = value[0];
+            characteristic
+                .read()
+                .then((value) {
                   if (mounted) {
                     setState(() {
-                      this.rainbowMode = firstValue > 0;
+                      final firstValue = value[0];
+                      if (mounted) {
+                        setState(() {
+                          this.rainbowMode = firstValue > 0;
+                        });
+                      }
                     });
                   }
-                });
-              }
-            });
+                })
+                .catchError((e) {});
 
             if (characteristic.isNotifying) {
               characteristic.setNotifyValue(true);
@@ -594,16 +597,19 @@ class _ApplicationState extends State<Application>
           if (characteristic.serviceUuid == colorServiceUUID &&
               characteristic.characteristicUuid == colorCharacteristicUUID) {
             //First read, then sub.
-            characteristic.read().then((value) {
-              final b = value[0];
-              final g = value[1];
-              final r = value[2];
-              if (mounted) {
-                setState(() {
-                  this.selectedColor = Color.fromARGB(255, r, g, b);
-                });
-              }
-            });
+            characteristic
+                .read()
+                .then((value) {
+                  final b = value[0];
+                  final g = value[1];
+                  final r = value[2];
+                  if (mounted) {
+                    setState(() {
+                      this.selectedColor = Color.fromARGB(255, r, g, b);
+                    });
+                  }
+                })
+                .catchError((e) {});
 
             if (characteristic.isNotifying) {
               //Subscribe!
@@ -630,21 +636,24 @@ class _ApplicationState extends State<Application>
           if (characteristic.serviceUuid == colorServiceUUID &&
               characteristic.characteristicUuid == patternCharacteristicUUID) {
             //First read, then sub
-            characteristic.read().then((value) {
-              if (mounted) {
-                final stringValue = String.fromCharCodes(value);
-                setState(() {
-                  this.animationType = LightAnimationType.values.firstWhere(
-                    (element) {
-                      return element.command == stringValue;
-                    },
-                    orElse: () {
-                      return LightAnimationType.Flat;
-                    },
-                  );
-                });
-              }
-            });
+            characteristic
+                .read()
+                .then((value) {
+                  if (mounted) {
+                    final stringValue = String.fromCharCodes(value);
+                    setState(() {
+                      this.animationType = LightAnimationType.values.firstWhere(
+                        (element) {
+                          return element.command == stringValue;
+                        },
+                        orElse: () {
+                          return LightAnimationType.Flat;
+                        },
+                      );
+                    });
+                  }
+                })
+                .catchError((e) {});
 
             if (characteristic.isNotifying) {
               //Subscribe!
@@ -676,21 +685,24 @@ class _ApplicationState extends State<Application>
           if (characteristic.serviceUuid == colorServiceUUID &&
               characteristic.characteristicUuid == rateCharacteristicUUID) {
             //First read, then sub
-            characteristic.read().then((value) {
-              if (mounted) {
-                final stringValue = String.fromCharCodes(value);
-                // setState(() {
-                //   this.animationType = LightAnimationType.values.firstWhere(
-                //     (element) {
-                //       return element.command == stringValue;
-                //     },
-                //     orElse: () {
-                //       return LightAnimationType.Flat;
-                //     },
-                //   );
-                // });
-              }
-            });
+            characteristic
+                .read()
+                .then((value) {
+                  if (mounted) {
+                    final stringValue = String.fromCharCodes(value);
+                    // setState(() {
+                    //   this.animationType = LightAnimationType.values.firstWhere(
+                    //     (element) {
+                    //       return element.command == stringValue;
+                    //     },
+                    //     orElse: () {
+                    //       return LightAnimationType.Flat;
+                    //     },
+                    //   );
+                    // });
+                  }
+                })
+                .catchError((e) {});
 
             if (characteristic.isNotifying) {
               //Subscribe!
