@@ -542,198 +542,245 @@ class _ApplicationState extends State<Application>
     );
   }
 
-  void _handleNewServices(
+  Future<void> _handleNewServices(
     BluetoothDevice device,
     List<BluetoothService> services,
-  ) {
+  ) async {
     if (!device.isConnected) {
+      return;
+    }
+    //First, find the security service and auth char, and send it the password. Wait for it to reply with OK. Once it does, can continue.
+
+    final authChar = services
+        .where((s) => s.serviceUuid == securityServiceUUID)
+        .firstOrNull
+        ?.characteristics
+        .where((c) => c.characteristicUuid == authenticateCharacteristicUUID)
+        .firstOrNull;
+
+    if (authChar == null) {
       return;
     }
 
     try {
-      //Subscribe to services that notify, aka both the rainbow char and the color char of the color service:
-      for (final service in services) {
-        for (final characteristic in service.characteristics) {
-          if (characteristic.serviceUuid == colorServiceUUID &&
-              characteristic.characteristicUuid ==
-                  rainbowModeCharacteristicUUID) {
-            //Subscribe!
+      //Write the password to the auth char, and wait for it to reply with OK.
+      await authChar.write(
+        authenticatePasswordUUID.str.codeUnits,
+        withoutResponse: false,
+      );
 
-            //First read, then sub to the value.
-            characteristic
-                .read()
-                .then((value) {
-                  if (mounted) {
-                    setState(() {
-                      final firstValue = value[0];
+      authChar.setNotifyValue(true);
+      final authCharStream = authChar.lastValueStream.listen((value) {
+        final response = String.fromCharCodes(value);
+        if (response != "OK" && response != authenticatePasswordUUID.str) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  '❌ Authentication failed for ${getDeviceDisplayName(device)}: $response',
+                ),
+              ),
+            );
+          }
+
+          device.disconnect();
+          return;
+        }
+
+        try {
+          //Subscribe to services that notify, aka both the rainbow char and the color char of the color service:
+          for (final service in services) {
+            for (final characteristic in service.characteristics) {
+              if (characteristic.serviceUuid == colorServiceUUID &&
+                  characteristic.characteristicUuid ==
+                      rainbowModeCharacteristicUUID) {
+                //Subscribe!
+
+                //First read, then sub to the value.
+                characteristic
+                    .read()
+                    .then((value) {
                       if (mounted) {
                         setState(() {
-                          this.rainbowMode = firstValue > 0;
+                          final firstValue = value[0];
+                          if (mounted) {
+                            setState(() {
+                              this.rainbowMode = firstValue > 0;
+                            });
+                          }
                         });
                       }
-                    });
-                  }
-                })
-                .catchError((e) {});
+                    })
+                    .catchError((e) {});
 
-            if (characteristic.isNotifying) {
-              characteristic.setNotifyValue(true);
-              final rainbowModeCharStream = characteristic.lastValueStream
-                  .listen((value) {
-                    final firstValue = value[0];
-                    if (mounted) {
-                      setState(() {
-                        this.rainbowMode = firstValue > 0;
+                if (characteristic.isNotifying) {
+                  characteristic.setNotifyValue(true);
+                  final rainbowModeCharStream = characteristic.lastValueStream
+                      .listen((value) {
+                        final firstValue = value[0];
+                        if (mounted) {
+                          setState(() {
+                            this.rainbowMode = firstValue > 0;
+                          });
+                        }
                       });
-                    }
-                  });
 
-              device.cancelWhenDisconnected(rainbowModeCharStream);
-            }
-
-            continue;
-          }
-
-          if (characteristic.serviceUuid == colorServiceUUID &&
-              characteristic.characteristicUuid == colorCharacteristicUUID) {
-            //First read, then sub.
-            characteristic
-                .read()
-                .then((value) {
-                  final b = value[0];
-                  final g = value[1];
-                  final r = value[2];
-                  if (mounted) {
-                    setState(() {
-                      this.selectedColor = Color.fromARGB(255, r, g, b);
-                    });
-                  }
-                })
-                .catchError((e) {});
-
-            if (characteristic.isNotifying) {
-              //Subscribe!
-              characteristic.setNotifyValue(true);
-              final colorModeCharStream = characteristic.lastValueStream.listen(
-                (value) {
-                  final b = value[0];
-                  final g = value[1];
-                  final r = value[2];
-                  if (mounted) {
-                    setState(() {
-                      this.selectedColor = Color.fromARGB(255, r, g, b);
-                    });
-                  }
-                },
-              );
-
-              device.cancelWhenDisconnected(colorModeCharStream);
-            }
-
-            continue;
-          }
-
-          if (characteristic.serviceUuid == colorServiceUUID &&
-              characteristic.characteristicUuid == patternCharacteristicUUID) {
-            //First read, then sub
-            characteristic
-                .read()
-                .then((value) {
-                  if (mounted) {
-                    final stringValue = String.fromCharCodes(value);
-                    setState(() {
-                      this.animationType = LightAnimationType.values.firstWhere(
-                        (element) {
-                          return element.command == stringValue;
-                        },
-                        orElse: () {
-                          return LightAnimationType.Flat;
-                        },
-                      );
-                    });
-                  }
-                })
-                .catchError((e) {});
-
-            if (characteristic.isNotifying) {
-              //Subscribe!
-              characteristic.setNotifyValue(true);
-              final patternCharStream = characteristic.lastValueStream.listen((
-                value,
-              ) {
-                if (mounted) {
-                  final stringValue = String.fromCharCodes(value);
-                  setState(() {
-                    this.animationType = LightAnimationType.values.firstWhere(
-                      (element) {
-                        return element.command == stringValue;
-                      },
-                      orElse: () {
-                        return LightAnimationType.Flat;
-                      },
-                    );
-                  });
+                  device.cancelWhenDisconnected(rainbowModeCharStream);
                 }
-              });
 
-              device.cancelWhenDisconnected(patternCharStream);
+                continue;
+              }
+
+              if (characteristic.serviceUuid == colorServiceUUID &&
+                  characteristic.characteristicUuid ==
+                      colorCharacteristicUUID) {
+                //First read, then sub.
+                characteristic
+                    .read()
+                    .then((value) {
+                      final b = value[0];
+                      final g = value[1];
+                      final r = value[2];
+                      if (mounted) {
+                        setState(() {
+                          this.selectedColor = Color.fromARGB(255, r, g, b);
+                        });
+                      }
+                    })
+                    .catchError((e) {});
+
+                if (characteristic.isNotifying) {
+                  //Subscribe!
+                  characteristic.setNotifyValue(true);
+                  final colorModeCharStream = characteristic.lastValueStream
+                      .listen((value) {
+                        final b = value[0];
+                        final g = value[1];
+                        final r = value[2];
+                        if (mounted) {
+                          setState(() {
+                            this.selectedColor = Color.fromARGB(255, r, g, b);
+                          });
+                        }
+                      });
+
+                  device.cancelWhenDisconnected(colorModeCharStream);
+                }
+
+                continue;
+              }
+
+              if (characteristic.serviceUuid == colorServiceUUID &&
+                  characteristic.characteristicUuid ==
+                      patternCharacteristicUUID) {
+                //First read, then sub
+                characteristic
+                    .read()
+                    .then((value) {
+                      if (mounted) {
+                        final stringValue = String.fromCharCodes(value);
+                        setState(() {
+                          this.animationType = LightAnimationType.values
+                              .firstWhere(
+                                (element) {
+                                  return element.command == stringValue;
+                                },
+                                orElse: () {
+                                  return LightAnimationType.Flat;
+                                },
+                              );
+                        });
+                      }
+                    })
+                    .catchError((e) {});
+
+                if (characteristic.isNotifying) {
+                  //Subscribe!
+                  characteristic.setNotifyValue(true);
+                  final patternCharStream = characteristic.lastValueStream
+                      .listen((value) {
+                        if (mounted) {
+                          final stringValue = String.fromCharCodes(value);
+                          setState(() {
+                            this.animationType = LightAnimationType.values
+                                .firstWhere(
+                                  (element) {
+                                    return element.command == stringValue;
+                                  },
+                                  orElse: () {
+                                    return LightAnimationType.Flat;
+                                  },
+                                );
+                          });
+                        }
+                      });
+
+                  device.cancelWhenDisconnected(patternCharStream);
+                }
+
+                continue;
+              }
+
+              if (characteristic.serviceUuid == colorServiceUUID &&
+                  characteristic.characteristicUuid == rateCharacteristicUUID) {
+                //First read, then sub
+                characteristic
+                    .read()
+                    .then((value) {
+                      if (mounted) {
+                        final stringValue = String.fromCharCodes(value);
+                        print("Rate: $stringValue");
+                        // setState(() {
+                        //   this.animationType = LightAnimationType.values.firstWhere(
+                        //     (element) {
+                        //       return element.command == stringValue;
+                        //     },
+                        //     orElse: () {
+                        //       return LightAnimationType.Flat;
+                        //     },
+                        //   );
+                        // });
+                      }
+                    })
+                    .catchError((e) {});
+
+                if (characteristic.isNotifying) {
+                  //Subscribe!
+                  characteristic.setNotifyValue(true);
+                  final rateCharStream = characteristic.lastValueStream.listen((
+                    value,
+                  ) {
+                    print("Rate: ${String.fromCharCodes(value)}");
+                    // if (mounted) {
+                    //   final stringValue = String.fromCharCodes(value);
+                    //   setState(() {
+                    //     this.animationType = LightAnimationType.values.firstWhere(
+                    //       (element) {
+                    //         return element.command == stringValue;
+                    //       },
+                    //       orElse: () {
+                    //         return LightAnimationType.Flat;
+                    //       },
+                    //     );
+                    //   });
+                    // }
+                  });
+
+                  device.cancelWhenDisconnected(rateCharStream);
+                }
+
+                continue;
+              }
             }
-
-            continue;
           }
-
-          if (characteristic.serviceUuid == colorServiceUUID &&
-              characteristic.characteristicUuid == rateCharacteristicUUID) {
-            //First read, then sub
-            characteristic
-                .read()
-                .then((value) {
-                  if (mounted) {
-                    final stringValue = String.fromCharCodes(value);
-                    // setState(() {
-                    //   this.animationType = LightAnimationType.values.firstWhere(
-                    //     (element) {
-                    //       return element.command == stringValue;
-                    //     },
-                    //     orElse: () {
-                    //       return LightAnimationType.Flat;
-                    //     },
-                    //   );
-                    // });
-                  }
-                })
-                .catchError((e) {});
-
-            if (characteristic.isNotifying) {
-              //Subscribe!
-              characteristic.setNotifyValue(true);
-              final patternCharStream = characteristic.lastValueStream.listen((
-                value,
-              ) {
-                // if (mounted) {
-                //   final stringValue = String.fromCharCodes(value);
-                //   setState(() {
-                //     this.animationType = LightAnimationType.values.firstWhere(
-                //       (element) {
-                //         return element.command == stringValue;
-                //       },
-                //       orElse: () {
-                //         return LightAnimationType.Flat;
-                //       },
-                //     );
-                //   });
-                // }
-              });
-
-              device.cancelWhenDisconnected(patternCharStream);
-            }
-
-            continue;
-          }
+        } catch (e) {
+          device.disconnect();
+          return;
         }
-      }
+      });
     } catch (e) {
-      //do nothing, it's cool :)
+      device.disconnect();
+      return;
     }
   }
 

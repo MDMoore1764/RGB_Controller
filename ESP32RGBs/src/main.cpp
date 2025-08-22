@@ -4,6 +4,8 @@
 #include <BLE2902.h>
 #include <BLEDescriptor.h>
 #include <Adafruit_NeoPixel.h>
+#include <unordered_set>
+#include <unordered_map>
 
 #define LED_PIN D10
 #define POWER_PIN D0
@@ -14,6 +16,10 @@ Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // Create color service and characteristics
 #define COLOR_SERVICE_UUID "f9bbfc69-8184-4a4b-af62-f560441faf50"
+#define SECURITY_SERVICE_UUID "8a6ff27e-42f7-487c-892d-d4276e2b9438"
+#define PASSWORD "ba1109ee-352f-4c22-9c67-b9c5350a2dc8"
+
+#define AUTHENTICATE_CHARACTERISTIC_UUID "e2ded851-c0dd-4dca-b607-2cb0631bc549"
 #define COLOR_CHARACTERISTIC_UUID "6cb02075-6a70-4f34-a51f-15120e7e1e2f"
 #define COLOR_PATTERN_CHARACTERISTIC_UUID "ac1d5ac2-1641-4a96-9297-73a3fda2a664"
 #define PATTERN_RATE_CHARACTERISTIC_UUID "ac1d5ac2-1641-4a96-9297-73a3fda2a663"
@@ -29,6 +35,9 @@ public:
   uint16_t interval;
   String pattern;
   bool rainbow;
+
+  std::unordered_map<uint16_t, unsigned long> *devicesPendingAuthentication;
+  std::unordered_set<uint16_t> *authenticatedDeviceSet;
   DeviceSettings()
   {
     red = 0;
@@ -37,6 +46,13 @@ public:
     pattern = "flat";
     interval = 50; // milliseconds
     rainbow = false;
+    devicesPendingAuthentication = new std::unordered_map<uint16_t, unsigned long>();
+    authenticatedDeviceSet = new std::unordered_set<uint16_t>();
+  }
+
+  bool isAuthenticated(uint16_t connectionID)
+  {
+    return this->authenticatedDeviceSet->find(connectionID) != this->authenticatedDeviceSet->end();
   }
 
   int generateHexCode()
@@ -63,6 +79,9 @@ public:
 
   void onConnect(BLEServer *pServer)
   {
+    // Add the device ID for authentication.
+    this->deviceSettings->devicesPendingAuthentication->insert({pServer->getConnId(), millis()});
+
     pServer->startAdvertising();
     auto colorCharacteristic = pServer->getServiceByUUID(COLOR_SERVICE_UUID)
                                    ->getCharacteristic(COLOR_CHARACTERISTIC_UUID);
@@ -112,23 +131,60 @@ public:
   void onDisconnect(BLEServer *pServer)
   {
     pServer->startAdvertising();
+
+    auto connectionID = pServer->getConnId();
+    this->deviceSettings->devicesPendingAuthentication->erase(connectionID);
+    this->deviceSettings->authenticatedDeviceSet->erase(connectionID);
+
     Serial.println("Client disconnected");
   }
 };
 
-class RainbowModeCallbacks : public BLECharacteristicCallbacks
+class AuthenticatedBLECharacteristicCallbacks : public BLECharacteristicCallbacks
+{
+
+protected:
+  DeviceSettings *deviceSettings;
+  BLEServer *pServer;
+
+  AuthenticatedBLECharacteristicCallbacks(DeviceSettings *deviceSettings, BLEServer *pServer) : BLECharacteristicCallbacks()
+  {
+    this->deviceSettings = deviceSettings;
+    this->pServer = pServer;
+  }
+
+  bool isAuthenticated()
+  {
+    return this->deviceSettings->isAuthenticated(this->pServer->getConnId());
+  }
+
+public:
+  virtual ~AuthenticatedBLECharacteristicCallbacks() {}
+  virtual void onWrite(BLECharacteristic *characteristic) = 0;
+  virtual void onRead(BLECharacteristic *characteristic) = 0;
+};
+
+class RainbowModeCallbacks : public AuthenticatedBLECharacteristicCallbacks
 {
 private:
   DeviceSettings *deviceSettings;
+  BLEServer *pServer;
 
 public:
-  RainbowModeCallbacks(DeviceSettings *deviceSettings)
+  RainbowModeCallbacks(DeviceSettings *deviceSettings, BLEServer *pServer) : AuthenticatedBLECharacteristicCallbacks(deviceSettings, pServer)
   {
     this->deviceSettings = deviceSettings;
+    this->pServer = pServer;
   }
 
   void onWrite(BLECharacteristic *pCharacteristic) override
   {
+    if (!this->isAuthenticated())
+    {
+      Serial.println("Unauthorized write attempt to rainbow mode characteristic.");
+      return;
+    }
+
     String value = pCharacteristic->getValue();
 
     if (value.length() > 0)
@@ -140,25 +196,82 @@ public:
 
   void onRead(BLECharacteristic *pCharacteristic) override
   {
+    if (!this->isAuthenticated())
+    {
+      Serial.println("Unauthorized write attempt to rainbow mode characteristic.");
+      return;
+    }
+
     int rainbowValue = this->deviceSettings->rainbowMode();
     pCharacteristic->setValue(rainbowValue);
     Serial.printf("Rainbow mode read as: %d\n", rainbowValue);
   }
 };
 
-class PatternCallbacks : public BLECharacteristicCallbacks
+class AuthenticationCallbacks : public BLECharacteristicCallbacks
 {
 private:
   DeviceSettings *deviceSettings;
+  BLEServer *pServer;
 
 public:
-  PatternCallbacks(DeviceSettings *deviceSettings)
+  AuthenticationCallbacks(DeviceSettings *deviceSettings, BLEServer *pServer)
   {
     this->deviceSettings = deviceSettings;
+    this->pServer = pServer;
   }
 
   void onWrite(BLECharacteristic *pCharacteristic) override
   {
+    String value = pCharacteristic->getValue();
+
+    auto connectionID = this->pServer->getConnId();
+
+    Serial.printf("Attempting to authorize with password %s", value.c_str());
+
+    if (value.length() > 0 && value == PASSWORD)
+    {
+      Serial.printf("Authentication successful for connection ID: %d\n", connectionID);
+      this->deviceSettings->authenticatedDeviceSet->insert(connectionID);
+      this->deviceSettings->devicesPendingAuthentication->erase(connectionID);
+      pCharacteristic->setValue("OK");
+      pCharacteristic->notify("OK");
+    }
+    else if (value == "OK")
+    {
+      return;
+    }
+    else
+    {
+      Serial.println("Authentication failed.");
+      this->pServer->disconnect(connectionID);
+      this->deviceSettings->authenticatedDeviceSet->erase(connectionID);
+      this->deviceSettings->devicesPendingAuthentication->erase(connectionID);
+    }
+  }
+};
+
+class PatternCallbacks : public AuthenticatedBLECharacteristicCallbacks
+{
+private:
+  DeviceSettings *deviceSettings;
+  BLEServer *pServer;
+
+public:
+  PatternCallbacks(DeviceSettings *deviceSettings, BLEServer *pServer) : AuthenticatedBLECharacteristicCallbacks(deviceSettings, pServer)
+  {
+    this->deviceSettings = deviceSettings;
+    this->pServer = pServer;
+  }
+
+  void onWrite(BLECharacteristic *pCharacteristic) override
+  {
+    if (!this->isAuthenticated())
+    {
+      Serial.println("Unauthorized write attempt to pattern characteristic.");
+      return;
+    }
+
     String value = pCharacteristic->getValue();
 
     if (value.length() > 0)
@@ -170,25 +283,39 @@ public:
 
   void onRead(BLECharacteristic *pCharacteristic) override
   {
+    if (!this->isAuthenticated())
+    {
+      Serial.println("Unauthorized read attempt to pattern characteristic.");
+      return;
+    }
+
     pCharacteristic->setValue(deviceSettings->pattern);
     Serial.printf("Pattern read as: %d\n", deviceSettings->pattern.c_str());
   }
 };
 
-class PatternRateCallbacks : public BLECharacteristicCallbacks
+class PatternRateCallbacks : public AuthenticatedBLECharacteristicCallbacks
 {
 private:
   DeviceSettings *deviceSettings;
+  BLEServer *pServer;
 
 public:
-  PatternRateCallbacks(DeviceSettings *deviceSettings)
+  PatternRateCallbacks(DeviceSettings *deviceSettings, BLEServer *pServer) : AuthenticatedBLECharacteristicCallbacks(deviceSettings, pServer)
   {
     this->deviceSettings = deviceSettings;
+    this->pServer = pServer;
   }
 
   void onWrite(BLECharacteristic *pCharacteristic) override
   {
-    String value = pCharacteristic->getValue(); // Arduino String
+    if (!this->isAuthenticated())
+    {
+      Serial.println("Unauthorized write attempt to pattern rate characteristic.");
+      return;
+    }
+
+    String value = pCharacteristic->getValue();
 
     if (value.length() == 8)
     {
@@ -207,24 +334,38 @@ public:
 
   void onRead(BLECharacteristic *pCharacteristic) override
   {
+    if (!this->isAuthenticated())
+    {
+      Serial.println("Unauthorized read attempt to pattern rate characteristic.");
+      return;
+    }
+
     pCharacteristic->setValue(deviceSettings->interval);
     Serial.printf("Pattern rate read as: %i\n", deviceSettings->interval);
   }
 };
 
-class ColorCharacteristicCallbacks : public BLECharacteristicCallbacks
+class ColorCharacteristicCallbacks : public AuthenticatedBLECharacteristicCallbacks
 {
 private:
   DeviceSettings *deviceSettings;
+  BLEServer *pServer;
 
 public:
-  ColorCharacteristicCallbacks(DeviceSettings *deviceSettings)
+  ColorCharacteristicCallbacks(DeviceSettings *deviceSettings, BLEServer *pServer) : AuthenticatedBLECharacteristicCallbacks(deviceSettings, pServer)
   {
     this->deviceSettings = deviceSettings;
+    this->pServer = pServer;
   }
 
   void onWrite(BLECharacteristic *pCharacteristic) override
   {
+    if (!this->isAuthenticated())
+    {
+      Serial.println("Unauthorized write attempt to color characteristic.");
+      return;
+    }
+
     String value = pCharacteristic->getValue();
     if (value.length() == 3)
     {
@@ -237,6 +378,12 @@ public:
 
   void onRead(BLECharacteristic *pCharacteristic) override
   {
+    if (!this->isAuthenticated())
+    {
+      Serial.println("Unauthorized read attempt to color characteristic.");
+      return;
+    }
+
     uint8_t colorValue[3] = {this->deviceSettings->red, this->deviceSettings->green, this->deviceSettings->blue};
     pCharacteristic->setValue(colorValue, 3);
     Serial.printf("Color read as: R=%d, G=%d, B=%d\n", this->deviceSettings->red, this->deviceSettings->green, this->deviceSettings->blue);
@@ -244,7 +391,6 @@ public:
 };
 
 // PATTERNS
-
 class Pattern
 {
 public:
@@ -256,7 +402,10 @@ public:
 class FlatPattern : public Pattern
 {
 public:
-  FlatPattern(DeviceSettings *settings) { this->settings = settings; }
+  FlatPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     strip.fill(strip.Color(settings->red, settings->green, settings->blue));
@@ -271,7 +420,10 @@ class GlowPattern : public Pattern
   float step = 0.02;
 
 public:
-  GlowPattern(DeviceSettings *settings) { this->settings = settings; }
+  GlowPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -297,7 +449,10 @@ class PulsePattern : public Pattern
   float step = 0.05;
 
 public:
-  PulsePattern(DeviceSettings *settings) { this->settings = settings; }
+  PulsePattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -322,7 +477,10 @@ class StrobePattern : public Pattern
   bool on = false;
 
 public:
-  StrobePattern(DeviceSettings *settings) { this->settings = settings; }
+  StrobePattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -344,7 +502,10 @@ class FadePattern : public Pattern
   float step = 0.02;
 
 public:
-  FadePattern(DeviceSettings *settings) { this->settings = settings; }
+  FadePattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -369,7 +530,10 @@ class RainbowPattern : public Pattern
   int offset = 0;
 
 public:
-  RainbowPattern(DeviceSettings *settings) { this->settings = settings; }
+  RainbowPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -392,7 +556,10 @@ class CyclePattern : public Pattern
   int position = 0;
 
 public:
-  CyclePattern(DeviceSettings *settings) { this->settings = settings; }
+  CyclePattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -414,7 +581,10 @@ class BreathePattern : public Pattern
   float step = 0.02;
 
 public:
-  BreathePattern(DeviceSettings *settings) { this->settings = settings; }
+  BreathePattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -439,7 +609,10 @@ class WavePattern : public Pattern
   int position = 0;
 
 public:
-  WavePattern(DeviceSettings *settings) { this->settings = settings; }
+  WavePattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -465,7 +638,10 @@ class FirePattern : public Pattern
   unsigned long lastUpdate = 0;
 
 public:
-  FirePattern(DeviceSettings *settings) { this->settings = settings; }
+  FirePattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -490,7 +666,10 @@ class SparklePattern : public Pattern
   unsigned long lastUpdate = 0;
 
 public:
-  SparklePattern(DeviceSettings *settings) { this->settings = settings; }
+  SparklePattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -515,7 +694,10 @@ class FlashPattern : public Pattern
   bool on = false;
 
 public:
-  FlashPattern(DeviceSettings *settings) { this->settings = settings; }
+  FlashPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -536,7 +718,10 @@ class ChasePattern : public Pattern
   int position = 0;
 
 public:
-  ChasePattern(DeviceSettings *settings) { this->settings = settings; }
+  ChasePattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -556,7 +741,10 @@ class TwinklePattern : public Pattern
   unsigned long lastUpdate = 0;
 
 public:
-  TwinklePattern(DeviceSettings *settings) { this->settings = settings; }
+  TwinklePattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -576,7 +764,10 @@ class MeteorPattern : public Pattern
   int position = 0;
 
 public:
-  MeteorPattern(DeviceSettings *settings) { this->settings = settings; }
+  MeteorPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -602,7 +793,10 @@ class ScannerPattern : public Pattern
   bool forward = true;
 
 public:
-  ScannerPattern(DeviceSettings *settings) { this->settings = settings; }
+  ScannerPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -636,7 +830,10 @@ class CometPattern : public Pattern
   int position = 0;
 
 public:
-  CometPattern(DeviceSettings *settings) { this->settings = settings; }
+  CometPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -661,7 +858,10 @@ class WipePattern : public Pattern
   int position = 0;
 
 public:
-  WipePattern(DeviceSettings *settings) { this->settings = settings; }
+  WipePattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -692,7 +892,10 @@ class LarsonPattern : public Pattern
   bool forward = true;
 
 public:
-  LarsonPattern(DeviceSettings *settings) { this->settings = settings; }
+  LarsonPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -726,7 +929,10 @@ class FireworksPattern : public Pattern
   unsigned long lastUpdate = 0;
 
 public:
-  FireworksPattern(DeviceSettings *settings) { this->settings = settings; }
+  FireworksPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -753,7 +959,10 @@ class ConfettiPattern : public Pattern
   unsigned long lastUpdate = 0;
 
 public:
-  ConfettiPattern(DeviceSettings *settings) { this->settings = settings; }
+  ConfettiPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -778,7 +987,10 @@ class RipplePattern : public Pattern
   int position = 0;
 
 public:
-  RipplePattern(DeviceSettings *settings) { this->settings = settings; }
+  RipplePattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -805,7 +1017,10 @@ class NoisePattern : public Pattern
   unsigned long lastUpdate = 0;
 
 public:
-  NoisePattern(DeviceSettings *settings) { this->settings = settings; }
+  NoisePattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -832,7 +1047,10 @@ class ILYPattern : public Pattern
   bool offPhase = false;
 
 public:
-  ILYPattern(DeviceSettings *settings) { this->settings = settings; }
+  ILYPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
 
   void update() override
   {
@@ -885,7 +1103,10 @@ class BrokenNeonPattern : public Pattern
   bool isOn = false;
 
 public:
-  BrokenNeonPattern(DeviceSettings *settings) { this->settings = settings; }
+  BrokenNeonPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
 
   void update() override
   {
@@ -937,7 +1158,10 @@ class ApocalypseLightning : public Pattern
   int segLength = 0;
 
 public:
-  ApocalypseLightning(DeviceSettings *settings) { this->settings = settings; }
+  ApocalypseLightning(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
 
   void update() override
   {
@@ -1002,7 +1226,10 @@ class SineWavePattern : public Pattern
   float phase = 0;
 
 public:
-  SineWavePattern(DeviceSettings *settings) { this->settings = settings; }
+  SineWavePattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -1030,7 +1257,10 @@ class BlizzardPattern : public Pattern
   unsigned long lastUpdate = 0;
 
 public:
-  BlizzardPattern(DeviceSettings *settings) { this->settings = settings; }
+  BlizzardPattern(DeviceSettings *settings)
+  {
+    this->settings = settings;
+  }
   void update() override
   {
     unsigned long now = millis();
@@ -1139,6 +1369,61 @@ public:
   }
 };
 
+class SecurityService
+{
+private:
+  DeviceSettings *settings;
+  BLEServer *server;
+  const ulong timeout = 10000;
+
+public:
+  SecurityService(DeviceSettings *settings, BLEServer *server)
+  {
+    this->settings = settings;
+    this->server = server;
+  }
+
+  void verifyDevices()
+  {
+    auto now = millis();
+
+    std::unordered_set<uint16_t> toRemove = std::unordered_set<uint16_t>();
+
+    // iterate over connected devices and disconnect those that are not authenticated if time has elapsed longer than timeout
+    for (auto it = settings->devicesPendingAuthentication->begin(); it != settings->devicesPendingAuthentication->end();)
+    {
+      auto connId = it->first;
+      auto connectedAt = it->second;
+
+      // Remove devices that are authenticated from the pending authentication list.
+      if (settings->authenticatedDeviceSet->find(connId) != settings->authenticatedDeviceSet->end())
+      {
+        // already authenticated → remove from pending
+        toRemove.insert(connId);
+        ++it;
+        continue;
+      }
+
+      // not authenticated in time
+      if (now - connectedAt > timeout)
+      {
+        Serial.printf("Disconnecting unauthenticated device with connection ID: %d\n", connId);
+        server->disconnect(connId);
+        toRemove.insert(connId);
+      }
+
+      ++it;
+    }
+
+    // remove collected devices from pending authentication
+    for (auto connId : toRemove)
+    {
+      settings->devicesPendingAuthentication->erase(connId);
+      Serial.printf("Removed device with connection ID: %d from pending authentication list.\n", connId);
+    }
+  }
+};
+
 Pattern *createPattern(String name, DeviceSettings *settings)
 {
   if (name == "flat")
@@ -1205,6 +1490,8 @@ Pattern *createPattern(String name, DeviceSettings *settings)
 BLEServer *pServer = nullptr;
 DeviceSettings *deviceSettings = nullptr;
 RainbowModeHandler *rainbowModeHandler = nullptr;
+SecurityService *authenticationtimeoutHandler = nullptr;
+
 void setup()
 {
   Serial.begin(115200);
@@ -1217,8 +1504,19 @@ void setup()
   deviceSettings = new DeviceSettings();
   rainbowModeHandler = new RainbowModeHandler(deviceSettings);
   pServer = BLEDevice::createServer();
+  authenticationtimeoutHandler = new SecurityService(deviceSettings, pServer);
 
   pServer->setCallbacks(new ServerCallbacks(deviceSettings));
+
+  // SECTION Security
+  BLEService *pSecurityService = pServer->createService(SECURITY_SERVICE_UUID);
+
+  auto pAuthenticateChar = pSecurityService->createCharacteristic(
+      AUTHENTICATE_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_WRITE);
+
+  pAuthenticateChar->setCallbacks(new AuthenticationCallbacks(deviceSettings, pServer));
+
+  //! SECTION Security
 
   BLEService *pColorService = pServer->createService(COLOR_SERVICE_UUID);
 
@@ -1230,7 +1528,7 @@ void setup()
 
   pColorModeChar->addDescriptor(pColorModeCharDescriptor);
   pColorModeChar->addDescriptor(new BLE2902());
-  pColorModeChar->setCallbacks(new ColorCharacteristicCallbacks(deviceSettings));
+  pColorModeChar->setCallbacks(new ColorCharacteristicCallbacks(deviceSettings, pServer));
 
   BLEDescriptor *pRainbowModeCharDescriptor = new BLEDescriptor((uint16_t)0x2901);
   pRainbowModeCharDescriptor->setValue("Rainbow mode enabled/disabled bit characteristic.");
@@ -1240,7 +1538,7 @@ void setup()
 
   pRainbowModeChar->addDescriptor(pRainbowModeCharDescriptor);
   pRainbowModeChar->addDescriptor(new BLE2902());
-  pRainbowModeChar->setCallbacks(new RainbowModeCallbacks(deviceSettings));
+  pRainbowModeChar->setCallbacks(new RainbowModeCallbacks(deviceSettings, pServer));
 
   BLEDescriptor *pPatternCharDescriptor = new BLEDescriptor((uint16_t)0x2901);
   pPatternCharDescriptor->setValue("The active color pattern.");
@@ -1250,7 +1548,7 @@ void setup()
 
   pPatternModeChar->addDescriptor(pPatternCharDescriptor);
   pPatternModeChar->addDescriptor(new BLE2902());
-  pPatternModeChar->setCallbacks(new PatternCallbacks(deviceSettings));
+  pPatternModeChar->setCallbacks(new PatternCallbacks(deviceSettings, pServer));
 
   // SECTION Pattern Rate Characteristic
 
@@ -1262,10 +1560,11 @@ void setup()
 
   pPatternRateChar->addDescriptor(pPatternRateCharDescriptor);
   pPatternRateChar->addDescriptor(new BLE2902());
-  pPatternRateChar->setCallbacks(new PatternRateCallbacks(deviceSettings));
+  pPatternRateChar->setCallbacks(new PatternRateCallbacks(deviceSettings, pServer));
 
   // !SECTION
 
+  pSecurityService->start();
   pColorService->start();
 
   auto advertisement = pServer->getAdvertising();
@@ -1283,6 +1582,11 @@ String currentPattern = "";
 bool isOff = false;
 void loop()
 {
+  if (pServer->getConnectedCount() > 0)
+  {
+    authenticationtimeoutHandler->verifyDevices();
+  }
+
   auto brightness = (deviceSettings->red + deviceSettings->green + deviceSettings->blue) / 3;
   strip.setBrightness(brightness);
 
