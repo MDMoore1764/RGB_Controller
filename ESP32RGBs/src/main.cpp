@@ -40,11 +40,11 @@ public:
   std::unordered_set<uint16_t> *authenticatedDeviceSet;
   DeviceSettings()
   {
-    red = 0;
-    green = 0;
-    blue = 0;
-    pattern = "flat";
-    interval = 50; // milliseconds
+    red = 125;
+    green = 125;
+    blue = 125;
+    pattern = "rainbow";
+    interval = 50;
     rainbow = false;
     devicesPendingAuthentication = new std::unordered_map<uint16_t, unsigned long>();
     authenticatedDeviceSet = new std::unordered_set<uint16_t>();
