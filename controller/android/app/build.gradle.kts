@@ -8,7 +8,7 @@ plugins {
 android {
     ndkVersion = "27.0.12077973"
     namespace = "com.example.controller"
-    compileSdk = 34
+    compileSdk = 35
     // ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -36,6 +36,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_colorpicker: ^1.1.0
   flutter_blue_plus: ^1.35.5
+  provider: ^6.1.5+1
+  shared_preferences: ^2.5.3
 
 flutter_launcher_icons:
   flutter_launcher_icons:

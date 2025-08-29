@@ -2,53 +2,13 @@ import 'dart:math';
 
 import 'package:frame_control/utilities/light_animation_type.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:provider/provider.dart';
+import 'package:frame_control/app_state.dart';
 
 import 'light_animation.dart';
 
-class Control extends StatefulWidget {
-  final Color color;
-  final List<ScanResult> availableDevices;
-
-  final double timeDelay;
-  final int offsetEvery;
-  final double rate;
-  final LightAnimationType selectedAnimation;
-  final void Function(LightAnimationType) onSelectAnimation;
-
-  void Function(double) ontimeDelayChange;
-  void Function(int) onOffsetEveryChange;
-  void Function(double) onRateChange;
-
-  Control({
-    super.key,
-    required this.color,
-    required this.availableDevices,
-    required this.timeDelay,
-    required this.offsetEvery,
-    required this.onOffsetEveryChange,
-    required this.ontimeDelayChange,
-    required this.onSelectAnimation,
-    required this.selectedAnimation,
-    required this.rate,
-    required this.onRateChange,
-  });
-
-  @override
-  State<Control> createState() => _ControlState();
-}
-
-class _ControlState extends State<Control> {
-  final List<LightAnimation> _animations = [];
-  _ControlState() {
-    _animations.addAll(buildAnimations(send));
-    _animations.sort();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-  }
+class Control extends StatelessWidget {
+  const Control({super.key});
 
   void sendPattern(String patternName) {
     debugPrint('Sending pattern: $patternName');
@@ -64,12 +24,9 @@ class _ControlState extends State<Control> {
       LightAnimationType.Strobe: Icons.flash_on,
       LightAnimationType.Fade: Icons.blur_on,
       LightAnimationType.Rainbow: Icons.gradient,
-      // LightAnimationType.Cycle: Icons.autorenew,
-      // LightAnimationType.Breathe: Icons.air,
       LightAnimationType.Wave: Icons.water,
       LightAnimationType.Fire: Icons.local_fire_department,
       LightAnimationType.Sparkle: Icons.auto_awesome,
-      // LightAnimationType.Flash: Icons.bolt,
       LightAnimationType.Chase: Icons.directions_run,
       LightAnimationType.Twinkle: Icons.star_border,
       LightAnimationType.Meteor: Icons.shower,
@@ -83,7 +40,6 @@ class _ControlState extends State<Control> {
       LightAnimationType.Noise: Icons.graphic_eq,
       LightAnimationType.ILY: Icons.favorite_outline_rounded,
       LightAnimationType.Neon: Icons.bolt,
-      // LightAnimationType.Sine: Icons.ssid_chart,
       LightAnimationType.Blizzard: Icons.snowing,
       LightAnimationType.Apoca: Icons.blur_on,
     };
@@ -95,228 +51,227 @@ class _ControlState extends State<Control> {
 
   @override
   Widget build(BuildContext context) {
-    final resultsWithConnectedDevices = widget.availableDevices.where((d) {
-      return d.device.isConnected;
-    }).toList();
+    return Consumer<AppState>(
+      builder: (context, appState, child) {
+        final animations = buildAnimations(send);
+        animations.sort();
 
-    final notConnectedScanResults = widget.availableDevices.where((d) {
-      return d.device.isDisconnected;
-    }).toList();
+        final resultsWithConnectedDevices = appState.availableDevices.where((
+          d,
+        ) {
+          return d.device.isConnected;
+        }).toList();
 
-    final timeDelayDisabled = resultsWithConnectedDevices.length <= 1;
-    final everyXDevicesDisabledDueToOffset =
-        timeDelayDisabled || widget.timeDelay < 0.1;
+        final notConnectedScanResults = appState.availableDevices.where((d) {
+          return d.device.isDisconnected;
+        }).toList();
 
-    final everyXDevicesDisabledDueToDeviceCount =
-        resultsWithConnectedDevices.length < 3;
+        final timeDelayDisabled = resultsWithConnectedDevices.length <= 1;
+        final everyXDevicesDisabledDueToOffset =
+            timeDelayDisabled || appState.timeDelay < 0.1;
 
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.start,
-      children: [
-        Column(
+        final everyXDevicesDisabledDueToDeviceCount =
+            resultsWithConnectedDevices.length < 3;
+
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
+            Column(
               children: [
-                Expanded(
-                  child: Column(
-                    children: [
-                      Text(
-                        timeDelayDisabled
-                            ? "Two or more devices required for time offset"
-                            : "Offset: ${widget.timeDelay.toStringAsFixed(1)} s",
-                      ),
-                      SizedBox(
-                        height: 50,
-                        child: RotatedBox(
-                          quarterTurns: 0,
-                          child: Slider(
-                            value: widget.timeDelay,
-                            min: 0.0,
-                            max: 5.0,
-                            divisions: (5.0 / 0.1).toInt(),
-                            label: "${widget.timeDelay.toStringAsFixed(1)} s",
-
-                            onChanged: timeDelayDisabled
-                                ? null
-                                : (double newValue) {
-                                    widget.ontimeDelayChange(newValue);
-                                  },
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Text(
+                            timeDelayDisabled
+                                ? "Two or more devices required for time offset"
+                                : "Offset: ${appState.timeDelay.toStringAsFixed(1)} s",
                           ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    children: [
-                      Text(
-                        everyXDevicesDisabledDueToDeviceCount
-                            ? "At least three devices required for device skip"
-                            : everyXDevicesDisabledDueToOffset
-                            ? "Offset required for device skip"
-                            : "Offset every${widget.offsetEvery == 1 ? '' : ' ${widget.offsetEvery.toStringAsFixed(0)}'} device${widget.offsetEvery == 1 ? '' : 's'}",
-                      ),
-                      RotatedBox(
-                        quarterTurns: 0,
-                        child: Slider(
-                          value: widget.offsetEvery.toDouble(),
-
-                          min: 0,
-                          max: 2,
-                          divisions: 19,
-                          label:
-                              "${widget.offsetEvery.toStringAsFixed(0)} devices",
-
-                          onChanged:
-                              everyXDevicesDisabledDueToDeviceCount ||
-                                  everyXDevicesDisabledDueToOffset
-                              ? null
-                              : (double newValue) {
-                                  setState(() {
-                                    widget.onOffsetEveryChange(
-                                      newValue.toInt(),
-                                    );
-                                  });
-                                },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    children: [
-                      Text("Pattern Rate"),
-                      RotatedBox(
-                        quarterTurns: 0,
-                        child: Slider(
-                          value: widget.rate.toDouble(),
-
-                          min: 1,
-                          max: 10,
-                          divisions: 98,
-                          label: "${widget.rate.toStringAsFixed(2)}",
-
-                          onChanged: (double newValue) {
-                            setState(() {
-                              widget.onRateChange(newValue);
-                            });
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-
-        Expanded(
-          child: Card(
-            elevation: 1,
-
-            // padding: const EdgeInsets.all(8),
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                color: widget.color,
-                                width: 1.5,
+                          SizedBox(
+                            height: 50,
+                            child: RotatedBox(
+                              quarterTurns: 0,
+                              child: Slider(
+                                value: appState.timeDelay,
+                                min: 0.0,
+                                max: 5.0,
+                                divisions: (5.0 / 0.1).toInt(),
+                                label:
+                                    "${appState.timeDelay.toStringAsFixed(1)} s",
+                                onChanged: timeDelayDisabled
+                                    ? null
+                                    : (double newValue) {
+                                        appState.setTimeDelay(newValue);
+                                      },
                               ),
                             ),
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Text(
-                              widget.selectedAnimation.name,
-                              style: TextStyle(fontSize: 16),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Text(
+                            everyXDevicesDisabledDueToDeviceCount
+                                ? "At least three devices required for device skip"
+                                : everyXDevicesDisabledDueToOffset
+                                ? "Offset required for device skip"
+                                : "Offset every${appState.offsetEvery == 1 ? '' : ' ${appState.offsetEvery.toStringAsFixed(0)}'} device${appState.offsetEvery == 1 ? '' : 's'}",
+                          ),
+                          RotatedBox(
+                            quarterTurns: 0,
+                            child: Slider(
+                              value: appState.offsetEvery.toDouble(),
+                              min: 0,
+                              max: 2,
+                              divisions: 19,
+                              label:
+                                  "${appState.offsetEvery.toStringAsFixed(0)} devices",
+                              onChanged:
+                                  everyXDevicesDisabledDueToDeviceCount ||
+                                      everyXDevicesDisabledDueToOffset
+                                  ? null
+                                  : (double newValue) {
+                                      appState.setOffsetEvery(newValue.toInt());
+                                    },
                             ),
                           ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Text("Pattern Rate"),
+                          RotatedBox(
+                            quarterTurns: 0,
+                            child: Slider(
+                              value: appState.rate.toDouble(),
+                              min: 1,
+                              max: 10,
+                              divisions: 98,
+                              label: "${appState.rate.toStringAsFixed(2)}",
+                              onChanged: (double newValue) {
+                                appState.setRate(newValue);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+
+            Expanded(
+              child: Card(
+                elevation: 1,
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: appState.selectedColor,
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Text(
+                                  appState.animationType.name,
+                                  style: TextStyle(fontSize: 16),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Expanded(
+                        child: GridView.builder(
+                          physics: BouncingScrollPhysics(),
+                          itemCount: animations.length,
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount:
+                                    4, // 👈 adjust column count as needed
+                                mainAxisSpacing: 10,
+                                crossAxisSpacing: 12,
+                                childAspectRatio:
+                                    0.8, // Adjust spacing of icon to text
+                              ),
+                          itemBuilder: (context, index) {
+                            final animation = animations[index];
+                            final icon = animation.icon;
+
+                            final isSelected =
+                                appState.animationType == animation.type;
+
+                            return ElevatedButton(
+                              onPressed: () {
+                                appState.setAnimationType(animation.type);
+                              },
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.all(0),
+                                elevation: 4,
+                                shape: const CircleBorder(),
+                                backgroundColor: isSelected
+                                    ? Theme.of(context)
+                                          .colorScheme
+                                          .secondaryContainer
+                                          .withAlpha(255)
+                                    : Theme.of(context)
+                                          .colorScheme
+                                          .secondaryContainer
+                                          .withAlpha(100),
+                                foregroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.onSecondaryContainer,
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(icon, size: 32),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    animation.name,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ],
                   ),
-                  Expanded(
-                    child: GridView.builder(
-                      physics: BouncingScrollPhysics(),
-                      itemCount: _animations.length,
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount:
-                                4, // 👈 adjust column count as needed
-                            mainAxisSpacing: 10,
-                            crossAxisSpacing: 12,
-                            childAspectRatio:
-                                0.8, // Adjust spacing of icon to text
-                          ),
-                      itemBuilder: (context, index) {
-                        final animation = _animations[index];
-                        final icon = animation.icon;
-
-                        final isSelected =
-                            widget.selectedAnimation == animation.type;
-
-                        return ElevatedButton(
-                          onPressed: () {
-                            widget.onSelectAnimation(animation.type);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.all(0),
-                            elevation: 4,
-                            shape: const CircleBorder(),
-                            backgroundColor: isSelected
-                                ? Theme.of(context)
-                                      .colorScheme
-                                      .secondaryContainer
-                                      .withAlpha(255)
-                                : Theme.of(context)
-                                      .colorScheme
-                                      .secondaryContainer
-                                      .withAlpha(100),
-                            foregroundColor: Theme.of(
-                              context,
-                            ).colorScheme.onSecondaryContainer,
-                          ),
-
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(icon, size: 32),
-                              const SizedBox(height: 8),
-                              Text(animation.name, textAlign: TextAlign.center),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }
