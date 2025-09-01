@@ -163,7 +163,7 @@ class Control extends StatelessWidget {
                               value: appState.rate.toDouble(),
                               min: 1,
                               max: 10,
-                              divisions: 98,
+                              divisions: 90,
                               label: "${appState.rate.toStringAsFixed(2)}",
                               onChanged: (double newValue) {
                                 appState.setRate(newValue);
