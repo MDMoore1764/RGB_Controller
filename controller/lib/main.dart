@@ -1,4 +1,5 @@
 // main.dart - Updated main file
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:frame_control/app_state.dart';
@@ -7,8 +8,16 @@ import 'package:provider/provider.dart';
 import 'package:frame_control/screens/color/color_screen.dart';
 import 'package:frame_control/screens/connect/connect.dart';
 import 'package:frame_control/screens/control/control.dart';
+import 'package:window_size/window_size.dart' as window_size;
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    window_size.setWindowTitle('Frame Controller');
+    window_size.setWindowFrame(const Rect.fromLTWH(100, 100, 600, 1000));
+  }
+
   runApp(const MyApp());
 }
 
