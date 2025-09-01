@@ -39,6 +39,7 @@ dependencies:
   shared_preferences: ^2.5.3
   flutter_blue_plus_windows: ^1.26.1
   window_size: ^0.1.0
+  msix: ^3.16.12
 
 flutter_launcher_icons:
   flutter_launcher_icons:

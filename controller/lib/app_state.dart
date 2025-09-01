@@ -60,6 +60,7 @@ class AppState extends ChangeNotifier {
   AppState() {
     _deviceConnectionStates = HashMap<String, BluetoothConnectionState>();
     _initializeThrottledFunctions();
+    loadPresets();
   }
 
   void _initializeThrottledFunctions() {
