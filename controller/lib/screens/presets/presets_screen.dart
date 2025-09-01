@@ -37,12 +37,11 @@ class _PresetsScreenState extends State<PresetsScreen>
   }
 
   void _showAddPresetModal(BuildContext context, AppState appState) {
-    final TextEditingController nameController = TextEditingController();
-
     showDialog(
       context: context,
       builder: (BuildContext context) {
         String name = "";
+        String? errorText;
         final TextEditingController nameController = TextEditingController();
 
         return Consumer<AppState>(
@@ -52,6 +51,15 @@ class _PresetsScreenState extends State<PresetsScreen>
                 nameController.addListener(() {
                   setDialogState(() {
                     name = nameController.text.trim();
+
+                    if (appState.presets.any(
+                      (preset) =>
+                          preset.name.toLowerCase() == name.toLowerCase(),
+                    )) {
+                      errorText = '"${name}" already exists.';
+                    } else {
+                      errorText = null;
+                    }
                   });
                 });
 
@@ -63,9 +71,9 @@ class _PresetsScreenState extends State<PresetsScreen>
                     children: [
                       TextField(
                         controller: nameController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Preset Name',
-                          hintText: 'Enter preset name',
+                          errorText: errorText,
                         ),
                         autofocus: true,
                       ),
@@ -74,6 +82,7 @@ class _PresetsScreenState extends State<PresetsScreen>
                         color: appState.selectedColor,
                         pattern: appState.animationType,
                         rainbowMode: appState.rainbowMode,
+                        rate: appState.rate,
                       ),
                     ],
                   ),
@@ -83,7 +92,7 @@ class _PresetsScreenState extends State<PresetsScreen>
                       child: const Text('Cancel'),
                     ),
                     ElevatedButton(
-                      onPressed: name.isEmpty
+                      onPressed: name.isEmpty || errorText != null
                           ? null
                           : () {
                               appState.addPreset(name);
@@ -159,7 +168,7 @@ class _PresetsScreenState extends State<PresetsScreen>
                       ),
                     )
                   : Card(
-                      margin: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.all(4),
                       elevation: 2,
                       child: ListView.separated(
                         padding: const EdgeInsets.all(8),
@@ -172,6 +181,7 @@ class _PresetsScreenState extends State<PresetsScreen>
                             rainbowModeColor: rainbowColor,
                             active: preset.id == appState.activePreset,
                             onApply: () => appState.applyPreset(preset),
+                            rate: preset.rate,
                             onDelete: () => _showDeleteConfirmation(
                               context,
                               appState,
@@ -198,7 +208,9 @@ class _PresetsScreenState extends State<PresetsScreen>
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Delete Preset'),
-          content: Text('Are you sure you want to delete "${preset.name}"?'),
+          content: Text(
+            'Are you sure you want to delete "${preset.displayName}"?',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -209,7 +221,9 @@ class _PresetsScreenState extends State<PresetsScreen>
                 appState.removePreset(preset.id);
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Preset "${preset.name}" deleted')),
+                  SnackBar(
+                    content: Text('Preset "${preset.displayName}" deleted'),
+                  ),
                 );
               },
               style: ElevatedButton.styleFrom(
@@ -236,6 +250,7 @@ class _PresetListItem extends StatelessWidget {
   final VoidCallback onApply;
   final VoidCallback onDelete;
   final bool active;
+  final double rate;
   final Color rainbowModeColor;
 
   const _PresetListItem({
@@ -244,6 +259,7 @@ class _PresetListItem extends StatelessWidget {
     required this.onDelete,
     required this.active,
     required this.rainbowModeColor,
+    required this.rate,
   });
 
   @override
@@ -266,7 +282,7 @@ class _PresetListItem extends StatelessWidget {
           ),
         ),
         title: Text(
-          preset.name.replaceFirst('.', preset.name[0].toUpperCase()),
+          preset.displayName,
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Column(
@@ -283,6 +299,7 @@ class _PresetListItem extends StatelessWidget {
                 ),
               ],
             ),
+            Row(children: [Text('Rate: '), Text(rate.toStringAsFixed(2))]),
           ],
         ),
         trailing: Row(
@@ -305,11 +322,13 @@ class _PresetPreview extends StatelessWidget {
   final Color color;
   final LightAnimationType pattern;
   final bool rainbowMode;
+  final double rate;
 
   const _PresetPreview({
     required this.color,
     required this.pattern,
     required this.rainbowMode,
+    required this.rate,
   });
 
   @override
@@ -352,6 +371,8 @@ class _PresetPreview extends StatelessWidget {
               Text(rainbowMode ? ' On' : ' Off'),
             ],
           ),
+          const SizedBox(height: 4),
+          Row(children: [Text('Rate: '), Text(rate.toStringAsFixed(2))]),
         ],
       ),
     );

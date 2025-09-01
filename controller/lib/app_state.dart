@@ -111,6 +111,7 @@ class AppState extends ChangeNotifier {
       pattern: _animationType,
       rainbowMode: _rainbowMode,
       createdAt: DateTime.now(),
+      rate: _rate,
     );
 
     _presets.add(preset);
@@ -129,7 +130,9 @@ class AppState extends ChangeNotifier {
     setSelectedColor(preset.color);
     setAnimationType(preset.pattern);
     setRainbowMode(preset.rainbowMode);
+    setRate(preset.rate);
     this._activePreset = preset.id;
+
     notifyListeners();
   }
 
