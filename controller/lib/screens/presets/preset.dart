@@ -36,29 +36,29 @@ class Preset {
       'pattern': pattern.name,
       'rainbowMode': rainbowMode.toString(),
       'createdAt': createdAt.toIso8601String(),
-      'rate': rate.toString(),
+      'rate': rate.toStringAsFixed(2),
     };
   }
 
   factory Preset.fromJson(Map<String, dynamic> json) {
     var colorParts = (json['color'] as String)
         .split(',')
-        .map(int.parse)
+        .map(double.parse)
         .toList();
     return Preset(
       id: json['id'],
       name: json['name'],
       color: Color.fromARGB(
-        colorParts[0],
-        colorParts[1],
-        colorParts[2],
-        colorParts[3],
+        (colorParts[0] * 255).floor(),
+        (colorParts[1] * 255).floor(),
+        (colorParts[2] * 255).floor(),
+        (colorParts[3] * 255).floor(),
       ),
       pattern: LightAnimationType.values.firstWhere(
         (e) => e.name == json['pattern'],
         orElse: () => LightAnimationType.Flat,
       ),
-      rainbowMode: json['rainbowMode'],
+      rainbowMode: bool.parse(json['rainbowMode']),
       createdAt: DateTime.parse(json['createdAt']),
       rate: double.parse(json['rate']),
     );
