@@ -96,7 +96,7 @@ BEGIN
             VALUE "LegalCopyright", "Copyright (C) 2025 Spice Works. All rights reserved." "\0"
             VALUE "OriginalFilename", "frame_controller.exe" "\0"
             VALUE "ProductName", "Frame Controller" "\0"
-            VALUE "ProductVersion", "1.0.0" "\0"
+            VALUE "ProductVersion", "1.1.0" "\0"
         END
     END
     BLOCK "VarFileInfo"
