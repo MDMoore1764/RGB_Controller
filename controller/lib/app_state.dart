@@ -7,7 +7,8 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
+import 'package:flutter_blue_plus_windows/flutter_blue_plus_windows.dart';
 import 'package:frame_control/Services/color_service.dart';
 import 'package:frame_control/screens/presets/preset.dart';
 import 'package:frame_control/utilities/bluetooth_device_utilities.dart';
@@ -23,7 +24,7 @@ class AppState extends ChangeNotifier {
   final HashSet<String> _connectingDeviceRemoteIDs = HashSet<String>();
   final HashSet<String> _disconnectingDeviceRemoteIDs = HashSet<String>();
 
-  BluetoothAdapterState _bleAdapterState = FlutterBluePlus.adapterStateNow;
+  BluetoothAdapterState _bleAdapterState = BluetoothAdapterState.on;
   List<ScanResult> _availableDevices = [];
   bool _scanning = false;
   late HashMap<String, BluetoothConnectionState> _deviceConnectionStates;
@@ -403,7 +404,7 @@ class AppState extends ChangeNotifier {
       return disconnectedDeviceIDs.contains(id);
     });
 
-    _scanSubscription = FlutterBluePlus.onScanResults.listen((results) {
+    _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
       for (var result in results) {
         if (!_availableDeviceRemoteIDs.contains(result.device.remoteId.str)) {
           _availableDeviceRemoteIDs.add(result.device.remoteId.str);

@@ -1,6 +1,7 @@
 import 'package:frame_control/utilities/bluetooth_device_utilities.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
+import 'package:flutter_blue_plus_windows/flutter_blue_plus_windows.dart';
 
 class DeviceCard extends StatelessWidget {
   final bool selected;

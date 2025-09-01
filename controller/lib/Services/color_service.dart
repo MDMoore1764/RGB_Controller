@@ -1,4 +1,4 @@
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_blue_plus_windows/flutter_blue_plus_windows.dart';
 
 final colorServiceUUID = Guid("f9bbfc69-8184-4a4b-af62-f560441faf50");
 final securityServiceUUID = Guid("8a6ff27e-42f7-487c-892d-d4276e2b9438");

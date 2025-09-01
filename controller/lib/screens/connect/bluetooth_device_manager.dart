@@ -1,7 +1,8 @@
 import 'dart:collection';
 import 'dart:ffi';
 import 'dart:io';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
+import 'package:flutter_blue_plus_windows/flutter_blue_plus_windows.dart';
 
 class BluetoothDeviceManager {
   final HashSet<String> _locatedDeviceRemoteIDs = HashSet<String>();
